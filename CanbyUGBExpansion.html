@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Canby UGB Expansion Feedback</title>
+  <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css">
+  <script src="https://js.arcgis.com/4.29/"></script>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; }
+
+    .viewDiv {
+      height: 90vh;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      position: absolute;
+      background-color: white;
+    }
+
+    #viewDiv1 { z-index: 4; }
+    #viewDiv2 { z-index: 1; pointer-events: none; }
+
+    .welcome-box {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: white;
+      padding: 10px;
+      border: 1px solid #ddd;
+      z-index: 6;
+      max-width: 350px;
+      height: auto;
+      font-size: 11px;
+    }
+
+    #banner {
+      position: absolute;
+      top: 30px;
+      right: 5%;
+      max-width: 50%;
+      z-index: 5;
+      background-color: transparent;
+      text-align: right;
+      text-shadow: 0 0 8px rgba(255,255,255, 1),
+      0 0 15px rgba(255, 255,255, 0.7);
+    }
+
+    @media only screen and (min-width: 768px) {
+      .welcome-box { font-size: 16px; }
+    }
+
+    h1, h2 { padding: 0px 15px 0px 15px; }
+
+    .close-button {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      cursor: pointer;
+      font-size: 20px;
+    }
+
+    /* Type picker panel (top-left) — the "type" half of type-then-paint */
+    #typePicker {
+      position: absolute;
+      top: 30px;
+      left: 30px;
+      max-width: 260px;
+      z-index: 5;
+      background-color: rgba(255, 255, 255, 0.92);
+      padding: 12px 14px;
+      border: 1px solid #ddd;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    #typePicker h3 { margin: 0 0 8px 0; padding: 0; font-size: 15px; }
+
+    .type-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 6px;
+      cursor: pointer;
+      border-radius: 5px;
+      transition: background-color 0.15s;
+    }
+
+    .type-option:hover { background-color: #eef; }
+
+    .type-option.active {
+      background-color: #e0e0ff;
+      outline: 2px solid #4444cc;
+    }
+
+    .swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      border: 1px solid rgba(0,0,0,0.3);
+      flex: 0 0 auto;
+    }
+
+    #selectionCount {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #333;
+    }
+
+    #applyButton {
+      position: absolute;
+      bottom: 30px;
+      right: 30px;
+      z-index: 5;
+      height: 44px;
+      min-width: 140px;
+      padding: 0 16px;
+      background-color: white;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    #applyButton:hover {
+      background-color: #4444cc;
+      color: white;
+      box-shadow: 0 5px 8px rgba(0, 0, 0, 0.4);
+    }
+
+    #layerSelector {
+      display: none;
+      position: absolute;
+      top: 30px;
+      left: 30px;
+      max-width: 40%;
+      z-index: 4;
+      background-color: rgba(255, 255, 255, 0.85);
+      padding: 12px;
+      border-radius: 8px;
+    }
+
+    #layerSelector h3 { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <h1 id="banner">Canby UGB Expansion</h1>
+
+  <!-- Selection / paint map -->
+  <div class="viewDiv" id="viewDiv1">
+    <div class="welcome-box">
+      <p>Welcome! First choose a land use type on the left, then click the hexagons on the map where you'd like to see that use. Click a hexagon again to clear it. You can switch types and keep going. When you're done, click "Submit Selections" to add your input and see how the community has weighed in.</p>
+      <span class="close-button" onclick="document.querySelector('.welcome-box').style.display = 'none'">x</span>
+    </div>
+
+    <div id="typePicker">
+      <h3>Choose a land use, then paint hexagons</h3>
+      <div class="type-option" data-type="SFSTD">
+        <span class="swatch" style="background:rgba(31,120,180,0.75)"></span>
+        <span>Single-Family Standard Lot</span>
+      </div>
+      <div class="type-option" data-type="SFSM">
+        <span class="swatch" style="background:rgba(102,194,165,0.75)"></span>
+        <span>Single-Family Small Lot &amp; Cottages</span>
+      </div>
+      <div class="type-option" data-type="TH">
+        <span class="swatch" style="background:rgba(255,187,0,0.8)"></span>
+        <span>Townhomes/Plexes</span>
+      </div>
+      <div class="type-option" data-type="MF">
+        <span class="swatch" style="background:rgba(227,26,28,0.75)"></span>
+        <span>Multi-Family</span>
+      </div>
+      <div class="type-option" data-type="ND">
+        <span class="swatch" style="background:rgba(120,120,120,0.75)"></span>
+        <span>No Development</span>
+      </div>
+      <div id="selectionCount">0 hexagons selected</div>
+    </div>
+
+    <button id="applyButton">Submit Selections</button>
+  </div>
+
+  <!-- Results map -->
+  <div class="viewDiv" id="viewDiv2">
+    <div id="layerSelector">
+      <h3>View Results by Type</h3>
+      <input type="radio" id="viewall" name="layer" value="viewall" checked>
+      <label for="viewall">View All</label><br>
+      <input type="radio" id="sfstd" name="layer" value="SFSTD">
+      <label for="sfstd">Single-Family Standard Lot</label><br>
+      <input type="radio" id="sfsm" name="layer" value="SFSM">
+      <label for="sfsm">Single-Family Small Lot &amp; Cottages</label><br>
+      <input type="radio" id="th" name="layer" value="TH">
+      <label for="th">Townhomes/Plexes</label><br>
+      <input type="radio" id="mf" name="layer" value="MF">
+      <label for="mf">Multi-Family</label><br>
+      <input type="radio" id="nd" name="layer" value="ND">
+      <label for="nd">No Development</label>
+    </div>
+  </div>
+
+  <script>
+    require([
+      "esri/Map",
+      "esri/views/MapView",
+      "esri/layers/FeatureLayer",
+      "esri/layers/GeoJSONLayer",
+      "esri/Graphic"
+    ], function(Map, MapView, FeatureLayer, GeoJSONLayer, Graphic) {
+
+      // ---- Configuration -------------------------------------------------
+      // The hexagon click layer is served as a static GeoJSON from the same
+      // GitHub Pages folder as this HTML file.
+      var GEOJSON_URL = "WS_Hexagons_5_Acres.geojson";
+
+      // The counter layer (same hexagons, hosted in AGOL). Public + Update
+      // capability enabled so anonymous submissions can increment counts.
+      var HEX_COUNTER_URL = "https://services3.arcgis.com/pZZTDhBBLO3B9dnl/arcgis/rest/services/WS_Hexagons_5_Acres/FeatureServer/0";
+
+      // Display / context layers.
+      var UGB_URL = "https://services3.arcgis.com/pZZTDhBBLO3B9dnl/arcgis/rest/services/Canby_UGB/FeatureServer/1";
+      var SUBAREAS_URL = "https://services3.arcgis.com/pZZTDhBBLO3B9dnl/arcgis/rest/services/Subareas1a_2_3/FeatureServer/1";
+
+      // The stable join key present in BOTH the GeoJSON and the AGOL layer.
+      var JOIN_FIELD = "HEX_ID";
+
+      // Land use types: field name -> { label, color }
+      // OS (Open Space) and EMP (Employment) exist in the layer but are
+      // intentionally not exposed yet. Add an entry here to enable one.
+      var TYPES = {
+        SFSTD: { label: "Single-Family Standard Lot",            color: [31, 120, 180, 0.75] },
+        SFSM:  { label: "Single-Family Small Lot & Cottages",     color: [102, 194, 165, 0.75] },
+        TH:    { label: "Townhomes/Plexes",                       color: [255, 187, 0, 0.8] },
+        MF:    { label: "Multi-Family",                           color: [227, 26, 28, 0.75] },
+        ND:    { label: "No Development",                         color: [120, 120, 120, 0.75] }
+      };
+
+      var STUDY_EXTENT = {
+        xmin: -122.72, ymin: 45.24,
+        xmax: -122.61, ymax: 45.29,
+        spatialReference: { wkid: 4326 }
+      };
+      // --------------------------------------------------------------------
+
+      // ===== Selection map =====
+      var map = new Map({ basemap: "hybrid" });
+      var view = new MapView({
+        container: "viewDiv1",
+        map: map,
+        extent: STUDY_EXTENT
+      });
+
+      // ===== Results map =====
+      var map2 = new Map({ basemap: "hybrid" });
+      var view2 = new MapView({
+        container: "viewDiv2",
+        map: map2,
+        extent: STUDY_EXTENT
+      });
+
+      // Context layers (selection map)
+      var ugbLayer = new FeatureLayer({
+        url: UGB_URL,
+        renderer: {
+          type: "simple",
+          symbol: {
+            type: "simple-fill",
+            color: [220, 220, 220, 0.15],
+            outline: { color: [0, 0, 255, 1], width: 2 }
+          }
+        }
+      });
+
+      var subareasLayer = new FeatureLayer({
+        url: SUBAREAS_URL,
+        renderer: {
+          type: "simple",
+          symbol: {
+            type: "simple-fill",
+            color: [0, 0, 255, 0],
+            outline: { color: [255, 0, 255, 1], width: 2 }
+          }
+        }
+      });
+
+      // Hexagon click layer. Rendered nearly transparent so the paint
+      // graphics we add on top are what the user sees.
+      var hexLayer = new GeoJSONLayer({
+        url: GEOJSON_URL,
+        outFields: ["*"],
+        renderer: {
+          type: "simple",
+          symbol: {
+            type: "simple-fill",
+            color: [0, 0, 0, 0],
+            outline: { color: [255, 255, 255, 0.6], width: 1 }
+          }
+        }
+      });
+
+      map.add(ugbLayer);
+      map.add(subareasLayer);
+      map.add(hexLayer);
+
+      // ===== Type-then-paint state =====
+      var activeType = null;              // currently selected land use field
+      var selections = {};                // HEX_ID -> { type, graphic }
+
+      // Wire up the type picker buttons
+      document.querySelectorAll(".type-option").forEach(function(el) {
+        el.addEventListener("click", function() {
+          activeType = el.getAttribute("data-type");
+          document.querySelectorAll(".type-option").forEach(function(o) {
+            o.classList.remove("active");
+          });
+          el.classList.add("active");
+        });
+      });
+
+      function updateSelectionCount() {
+        var n = Object.keys(selections).length;
+        document.getElementById("selectionCount").textContent =
+          n + (n === 1 ? " hexagon selected" : " hexagons selected");
+      }
+
+      function symbolFor(type) {
+        return {
+          type: "simple-fill",
+          color: TYPES[type].color,
+          outline: { color: [255, 255, 255, 0.9], width: 1 }
+        };
+      }
+
+      // Paint interaction: click a hexagon to assign the active type.
+      view.on("click", function(event) {
+        view.hitTest(event).then(function(response) {
+          var hit = response.results.find(function(r) {
+            return r.graphic && r.graphic.layer === hexLayer;
+          });
+          if (!hit) return;
+
+          if (!activeType) {
+            alert("Pick a land use type on the left first, then click hexagons.");
+            return;
+          }
+
+          var attrs = hit.graphic.attributes;
+          var hexId = attrs[JOIN_FIELD];
+          if (hexId === undefined || hexId === null) {
+            console.warn("Clicked hexagon has no " + JOIN_FIELD + " value.", attrs);
+            return;
+          }
+
+          var existing = selections[hexId];
+
+          // Clicking a hexagon that's already this type clears it (undo).
+          if (existing && existing.type === activeType) {
+            view.graphics.remove(existing.graphic);
+            delete selections[hexId];
+            updateSelectionCount();
+            return;
+          }
+
+          // Reassigning to a new type: drop the old paint graphic first.
+          if (existing) {
+            view.graphics.remove(existing.graphic);
+          }
+
+          var g = new Graphic({
+            geometry: hit.graphic.geometry,
+            symbol: symbolFor(activeType),
+            attributes: { HEX_ID: hexId, type: activeType }
+          });
+          view.graphics.add(g);
+          selections[hexId] = { type: activeType, graphic: g };
+          updateSelectionCount();
+        }).catch(function(err) {
+          console.error("hitTest error:", err);
+        });
+      });
+
+      // ===== Counter layer + submit =====
+      var counterFields = ["OBJECTID", JOIN_FIELD].concat(Object.keys(TYPES));
+      var counterLayer = new FeatureLayer({
+        url: HEX_COUNTER_URL,
+        outFields: counterFields
+      });
+
+      // Increment one field on the row matching a given HEX_ID.
+      function incrementHex(hexId, typeField) {
+        var query = counterLayer.createQuery();
+        query.where = JOIN_FIELD + " = " + hexId;
+        query.outFields = counterFields;
+        query.returnGeometry = false;
+
+        return counterLayer.queryFeatures(query).then(function(result) {
+          if (!result.features.length) {
+            console.warn("No counter row for " + JOIN_FIELD + " = " + hexId);
+            return;
+          }
+          var feature = result.features[0];
+          var current = feature.attributes[typeField] || 0;
+
+          var updateAttrs = { OBJECTID: feature.attributes.OBJECTID };
+          updateAttrs[typeField] = current + 1;
+
+          return counterLayer.applyEdits({
+            updateFeatures: [new Graphic({ attributes: updateAttrs })]
+          }).then(function(res) {
+            var r = res.updateFeatureResults && res.updateFeatureResults[0];
+            if (r && r.error) {
+              console.error("applyEdits error for HEX_ID " + hexId + ":", r.error);
+            }
+          });
+        }).catch(function(err) {
+          console.error("Increment failed for HEX_ID " + hexId + ":", err);
+        });
+      }
+
+      document.getElementById("applyButton").addEventListener("click", function() {
+        var ids = Object.keys(selections);
+        if (ids.length === 0) {
+          alert("No selections yet — pick a type and click some hexagons first.");
+          return;
+        }
+
+        var btn = this;
+        btn.disabled = true;
+        btn.textContent = "Submitting...";
+
+        var jobs = ids.map(function(hexId) {
+          return incrementHex(hexId, selections[hexId].type);
+        });
+
+        Promise.all(jobs).then(function() {
+          // Reset selections and swap to the results map.
+          view.graphics.removeAll();
+          selections = {};
+          updateSelectionCount();
+
+          var mv1 = document.getElementById("viewDiv1");
+          var mv2 = document.getElementById("viewDiv2");
+          mv1.style.zIndex = 1;
+          mv1.style.pointerEvents = "none";
+          mv2.style.zIndex = 5;
+          mv2.style.pointerEvents = "auto";
+          document.getElementById("layerSelector").style.display = "block";
+
+          refreshResults();
+        }).catch(function(err) {
+          console.error("Submit error:", err);
+          alert("Something went wrong submitting your selections. Please try again.");
+          btn.disabled = false;
+          btn.textContent = "Submit Selections";
+        });
+      });
+
+      // ===== Results map rendering =====
+      var popupTemplate = {
+        title: "Hexagon Results",
+        content: [{
+          type: "text",
+          text:
+            "Single-Family Standard Lot: {SFSTD}<br>" +
+            "Single-Family Small Lot & Cottages: {SFSM}<br>" +
+            "Townhomes/Plexes: {TH}<br>" +
+            "Multi-Family: {MF}<br>" +
+            "No Development: {ND}"
+        }]
+      };
+
+      // One intensity layer per type. Stops get rescaled to each field's max.
+      var resultLayers = {};
+      Object.keys(TYPES).forEach(function(field) {
+        var c = TYPES[field].color;
+        var layer = new FeatureLayer({
+          url: HEX_COUNTER_URL,
+          outFields: counterFields,
+          popupTemplate: popupTemplate,
+          renderer: {
+            type: "simple",
+            symbol: {
+              type: "simple-fill",
+              color: [c[0], c[1], c[2], 0.8],
+              outline: { color: [128, 128, 128, 0.4], width: 1 }
+            },
+            visualVariables: [{
+              type: "color",
+              field: field,
+              legendOptions: { title: TYPES[field].label },
+              stops: [
+                { value: 0, color: [c[0], c[1], c[2], 0] },
+                { value: 10, color: [c[0], c[1], c[2], 0.85] }
+              ]
+            }]
+          }
+        });
+        resultLayers[field] = layer;
+        map2.add(layer);
+      });
+
+      map2.add(subareasLayer);
+      map2.add(ugbLayer);
+
+      function getMaxValue(layer, field) {
+        var query = layer.createQuery();
+        query.outStatistics = [{
+          onStatisticField: field,
+          outStatisticFieldName: "max_" + field,
+          statisticType: "max"
+        }];
+        return layer.queryFeatures(query).then(function(response) {
+          var v = response.features[0].attributes["max_" + field];
+          return v || 0;
+        });
+      }
+
+      function refreshResults() {
+        Object.keys(TYPES).forEach(function(field) {
+          var layer = resultLayers[field];
+          var c = TYPES[field].color;
+          getMaxValue(layer, field).then(function(maxVal) {
+            var top = maxVal > 0 ? maxVal : 1;
+            layer.renderer = layer.renderer.clone();
+            layer.renderer.visualVariables = [{
+              type: "color",
+              field: field,
+              legendOptions: { title: TYPES[field].label },
+              stops: [
+                { value: 0, color: [c[0], c[1], c[2], 0] },
+                { value: top, color: [c[0], c[1], c[2], 0.85] }
+              ]
+            }];
+          });
+        });
+      }
+
+      // Results type filter
+      document.querySelectorAll('input[name="layer"]').forEach(function(radio) {
+        radio.addEventListener("change", function(event) {
+          var sel = event.target.value;
+          Object.keys(resultLayers).forEach(function(field) {
+            resultLayers[field].visible = (sel === "viewall" || sel === field);
+          });
+        });
+      });
+
+      view.ui.move("zoom", "bottom-left");
+      view2.ui.move("zoom", "bottom-left");
+    });
+  </script>
+</body>
+</html>

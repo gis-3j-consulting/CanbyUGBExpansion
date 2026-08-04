@@ -36,6 +36,7 @@
     }
 
     #banner {
+      display: none;   /* desktop: title lives in the panel instead */
       position: absolute;
       top: 20px; right: 5%;
       max-width: 45%;
@@ -43,6 +44,15 @@
       text-align: right;
       font-size: 24px;
       text-shadow: 0 0 8px rgba(255,255,255,1), 0 0 15px rgba(255,255,255,0.7);
+    }
+
+    /* Title at the top of the panel (desktop only) */
+    #panelTitle {
+      margin: 0 0 10px 0;
+      font-size: 18px; font-weight: 700; color: #1a1a1a;
+      line-height: 1.2;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #3333bb;
     }
 
     #resultsBanner {
@@ -114,8 +124,9 @@
     .type-acres { flex: 0 0 auto; font-size: 12px; color: #333; font-variant-numeric: tabular-nums; }
     .type-acres b { font-weight: 700; }
 
-    /* progress bar */
+    /* progress bar with a target tick */
     .bar-track {
+      position: relative;
       margin-top: 7px; height: 8px;
       background: #e6e6e6; border-radius: 5px; overflow: hidden;
     }
@@ -123,16 +134,24 @@
       height: 100%; width: 0%;
       background: #4a90d9;
       border-radius: 5px;
-      transition: width 0.2s ease, background 0.2s ease;
+      transition: width 0.2s ease;
     }
-    .type-row.at-target .bar-fill { background: #2e9b57; }
-    .type-row.over-target .bar-fill { background: #e0a02e; }
+    /* Target marker — a subtle vertical line sitting at the target value.
+       Positioned at 75% since bar max = target / 0.75. overflow on the
+       track is visible so the tick isn't clipped. */
+    .bar-track { overflow: visible; }
+    .bar-fill { border-radius: 5px 0 0 5px; }
+    .bar-tick {
+      position: absolute;
+      top: -2px; bottom: -2px;
+      left: 75%;
+      width: 2px;
+      background: rgba(40,40,40,0.55);
+      border-radius: 1px;
+      pointer-events: none;
+    }
 
-    .status-note { margin-top: 5px; font-size: 11px; color: #777; min-height: 13px; }
-    .type-row.at-target .status-note { color: #2e9b57; font-weight: 600; }
-    .type-row.over-target .status-note { color: #c07a00; font-weight: 600; }
-
-    /* No-goal row (ND) — visually distinct, no bar */
+    /* Park row — no target, no bar */
     .type-row.no-goal { border-style: dashed; }
     .no-goal-tag {
       font-size: 10px; color: #888; font-style: italic;
@@ -162,12 +181,19 @@
     /* ===== Mobile: panel becomes a collapsible bottom sheet ===== */
     @media only screen and (max-width: 768px) {
       #banner {
+        display: block;   /* mobile: bring back the title strip */
         top: 0; left: 0; right: 0; max-width: 100%;
         text-align: center; font-size: 16px;
         padding: 8px 10px; box-sizing: border-box;
         background: rgba(255,255,255,0.92);
         text-shadow: none; border-bottom: 1px solid #ddd;
+        z-index: 6;
       }
+      #panelTitle { display: none; }  /* mobile uses the strip, not the panel title */
+
+      /* Nudge the map UI widgets (zoom/home) down so they clear the title strip */
+      .esri-ui-top-left { margin-top: 44px; }
+
       .viewDiv { top: 0; }
       .welcome-box { max-width: 84%; font-size: 13px; }
 
@@ -222,16 +248,17 @@
   <!-- Selection / paint map -->
   <div class="viewDiv" id="viewDiv1">
     <div class="welcome-box">
-      <p>Welcome! Choose a land use type, then tap hexagons to place it. As you build your scenario, the panel tracks how many acres you've placed in <b>Subarea 1a</b> against the community targets. You can paint anywhere on the map &mdash; only Subarea 1a is measured against goals for now. Tap a hexagon again to clear it. When you're done, tap "Submit Scenario."</p>
+      <p>Welcome! Choose a land use type, then tap hexagons to place it. As you build your scenario, the panel tracks how many acres you've placed of each type against the community targets. Tap a hexagon again to clear it. When you're done, tap "Submit Scenario."</p>
       <span class="close-button" onclick="document.querySelector('.welcome-box').style.display='none'">&times;</span>
     </div>
 
     <div id="panel">
       <div id="sheetHandle"></div>
       <span id="sheetToggleLabel">tap to expand</span>
+      <div id="panelTitle">Canby UGB Expansion</div>
       <h3>Build your scenario</h3>
       <p class="hint">Pick a type, then tap hexagons on the map.</p>
-      <div class="subhead">Subarea 1a targets</div>
+      <div class="subhead">Acreage targets</div>
       <div id="rows"></div>
       <div id="grandTotal">Total placed: 0.0 acres</div>
     </div>
@@ -265,22 +292,21 @@
       var JOIN_FIELD = "HEX_ID";
       var AREA_FIELD = "Shape_Area";      // square feet
       var SQFT_PER_ACRE = 43560;
-      var SUBAREA_FIELD = "SubareaName";
-      var TARGET_SUBAREA = "1a";
 
-      // Order matters for panel display. target=null means "no goal" (ND).
+      // Each bar's full width represents target / TICK_FRAC, so the target
+      // tick lands at TICK_FRAC across (0.75 = 75%), leaving room to overshoot.
+      var TICK_FRAC = 0.75;
+
+      // Order matters for panel display. target=null means "no goal" (Park).
       var TYPES = [
-        { key: "SFSTD", label: "Single-Family Standard Lot",         color: [31,120,180],  target: 23 },
-        { key: "SFSM",  label: "Single-Family Small Lot & Cottages", color: [102,194,165], target: 34 },
-        { key: "TH",    label: "Townhomes/Plexes",                   color: [255,187,0],   target: 8  },
-        { key: "MF",    label: "Multi-Family",                       color: [227,26,28],   target: 8  },
-        { key: "ND",    label: "No Development",                     color: [120,120,120], target: null }
+        { key: "SFSTD", label: "Single-Family Standard Lot",         color: [31,120,180],  target: 38 },
+        { key: "SFSM",  label: "Single-Family Small Lot & Cottages", color: [102,194,165], target: 56 },
+        { key: "TH",    label: "Townhomes/Plexes",                   color: [255,187,0],   target: 21 },
+        { key: "MF",    label: "Multi-Family",                       color: [227,26,28],   target: 21 },
+        { key: "OS",    label: "Park",                               color: [34,120,52],   target: null }
       ];
       var TYPE_BY_KEY = {};
       TYPES.forEach(function(t){ TYPE_BY_KEY[t.key] = t; });
-
-      // "within one hexagon" tolerance for the at-target (green) state.
-      var AT_TARGET_TOL = 2.5; // acres
       // --------------------------------------------------------------------
 
       var FALLBACK_EXTENT = {
@@ -295,7 +321,7 @@
           url: UGB_URL,
           renderer: { type: "simple", symbol: {
             type: "simple-fill", color: [220,220,220,0.05],
-            outline: { color: [0,0,255,1], width: 2.5 } } }
+            outline: { color: [0,0,0,1], width: 2.5 } } }
         });
       }
       function makeSubareasLayer() {
@@ -368,28 +394,6 @@
           }
         }).catch(function(err){ console.error("hex extent:", err); });
 
-      // ===== Fetch Subarea 1a geometry for the centroid test =====
-      var subarea1aGeom = null;
-      var subareaQueryLayer = makeSubareasLayer();
-      subareaQueryLayer.load().then(function(){
-        var q = subareaQueryLayer.createQuery();
-        q.where = SUBAREA_FIELD + " = '" + TARGET_SUBAREA + "'";
-        q.returnGeometry = true;
-        q.outFields = [SUBAREA_FIELD];
-        // Hexagon centroids come through the view in Web Mercator (102100),
-        // so fetch 1a in the SAME SR — matching SRs is what makes contains work.
-        q.outSpatialReference = { wkid: 102100 };
-        return subareaQueryLayer.queryFeatures(q);
-      }).then(function(res){
-        if (res.features.length) {
-          subarea1aGeom = res.features[0].geometry;
-          // Re-evaluate any hexagons painted before 1a finished loading.
-          reevaluateSelections();
-        } else {
-          console.warn("[1a] Subarea '" + TARGET_SUBAREA + "' not found via " + SUBAREA_FIELD + ".");
-        }
-      }).catch(function(err){ console.error("[1a] subarea query:", err); });
-
       // Build spotlight from subareas extent
       var subareaForMask = makeSubareasLayer();
       subareaForMask.load().then(function(){ return subareaForMask.queryExtent(); })
@@ -429,18 +433,18 @@
           track.className = "bar-track";
           var fill = document.createElement("div");
           fill.className = "bar-fill";
+          var tick = document.createElement("div");
+          tick.className = "bar-tick";   // sits at 75% via CSS (= target)
           track.appendChild(fill);
+          track.appendChild(tick);
           row.appendChild(track);
-          var note = document.createElement("div");
-          note.className = "status-note";
-          row.appendChild(note);
-          rowEls[t.key] = { row: row, acres: ac, fill: fill, note: note };
+          rowEls[t.key] = { row: row, acres: ac, fill: fill };
         } else {
           var tag = document.createElement("div");
           tag.className = "no-goal-tag";
           tag.textContent = "No target — placement is counted but not tracked against a goal.";
           row.appendChild(tag);
-          rowEls[t.key] = { row: row, acres: ac, fill: null, note: null };
+          rowEls[t.key] = { row: row, acres: ac, fill: null };
         }
 
         row.addEventListener("click", function(){
@@ -454,7 +458,7 @@
 
       // ===== Paint state =====
       var activeType = null;
-      // selections[hexId] = { type, graphic, geometry, acres, acres1a }
+      // selections[hexId] = { type, graphic, geometry, acres }
       var selections = {};
 
       function acresOf(attrs){
@@ -462,34 +466,9 @@
         return (typeof sqft === "number" && sqft > 0) ? sqft / SQFT_PER_ACRE : 0;
       }
 
-      // Returns the acreage of the hexagon that falls INSIDE subarea 1a.
-      // Straddling hexagons return their partial (clipped) overlap area.
-      function acresIn1a(geometry, fullAcres){
-        if (!subarea1aGeom) return 0;
-        try {
-          var clipped = geometryEngine.intersect(subarea1aGeom, geometry);
-          if (!clipped) return 0;
-          var sqMeters = Math.abs(geometryEngine.geodesicArea(clipped, "square-meters"));
-          var overlapAcres = sqMeters * 0.000247105381;
-          if (fullAcres && overlapAcres > fullAcres) overlapAcres = fullAcres;
-          return overlapAcres;
-        } catch (e) {
-          console.warn("[1a] intersect/measure failed:", e);
-          return 0;
-        }
-      }
-
       function symbolFor(key){
         var c = TYPE_BY_KEY[key].color;
         return { type: "simple-fill", color: rgba(c, 0.75), outline: { color: [255,255,255,0.9], width: 1 } };
-      }
-
-      function reevaluateSelections(){
-        Object.keys(selections).forEach(function(id){
-          var s = selections[id];
-          s.acres1a = acresIn1a(s.geometry, s.acres);
-        });
-        recomputeTotals();
       }
 
       function recomputeTotals(){
@@ -500,12 +479,7 @@
         Object.keys(selections).forEach(function(id){
           var s = selections[id];
           grand += s.acres;
-          // ND: show all placed acreage (no goal). Targets: only the 1a overlap.
-          if (TYPE_BY_KEY[s.type].target === null) {
-            totalsByType[s.type] += s.acres;
-          } else {
-            totalsByType[s.type] += (s.acres1a || 0);
-          }
+          totalsByType[s.type] += s.acres;   // full hexagon acreage, all types
         });
 
         TYPES.forEach(function(t){
@@ -516,20 +490,10 @@
             return;
           }
           el.acres.innerHTML = "<b>" + placed.toFixed(1) + "</b> / " + t.target + " ac";
-          var pct = Math.min(100, (placed / t.target) * 100);
+          // Bar max = target / TICK_FRAC so the target tick sits at TICK_FRAC (75%).
+          var barMax = t.target / TICK_FRAC;
+          var pct = Math.min(100, (placed / barMax) * 100);
           el.fill.style.width = pct + "%";
-
-          el.row.classList.remove("at-target", "over-target");
-          var remaining = t.target - placed;
-          if (placed > t.target + AT_TARGET_TOL) {
-            el.row.classList.add("over-target");
-            el.note.textContent = (placed - t.target).toFixed(1) + " ac over target";
-          } else if (Math.abs(remaining) <= AT_TARGET_TOL) {
-            el.row.classList.add("at-target");
-            el.note.textContent = "Target met \u2713";
-          } else {
-            el.note.textContent = remaining.toFixed(1) + " ac to go";
-          }
         });
 
         document.getElementById("grandTotal").textContent =
@@ -565,13 +529,11 @@
             attributes: { HEX_ID: hexId, type: activeType }
           });
           view.graphics.add(g);
-          var fullAcres = acresOf(attrs);
           selections[hexId] = {
             type: activeType,
             graphic: g,
             geometry: hit.graphic.geometry,
-            acres: fullAcres,
-            acres1a: acresIn1a(hit.graphic.geometry, fullAcres)
+            acres: acresOf(attrs)
           };
           recomputeTotals();
         }).catch(function(err){ console.error("hitTest:", err); });

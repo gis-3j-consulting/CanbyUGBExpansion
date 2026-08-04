@@ -369,9 +369,9 @@
         q.where = SUBAREA_FIELD + " = '" + TARGET_SUBAREA + "'";
         q.returnGeometry = true;
         q.outFields = [SUBAREA_FIELD];
-        // Return 1a geometry in WGS84 so it matches the hexagon GeoJSON
-        // spatial reference — geometryEngine.contains needs both aligned.
-        q.outSpatialReference = { wkid: 4326 };
+        // Hexagon centroids come through the view in Web Mercator (102100),
+        // so fetch 1a in the SAME SR — matching SRs is what makes contains work.
+        q.outSpatialReference = { wkid: 102100 };
         return subareaQueryLayer.queryFeatures(q);
       }).then(function(res){
         if (res.features.length) {
@@ -448,7 +448,7 @@
 
       // ===== Paint state =====
       var activeType = null;
-      // selections[hexId] = { type, graphic, geometry, acres, in1a }
+      // selections[hexId] = { type, graphic, geometry, acres, acres1a }
       var selections = {};
 
       function acresOf(attrs){
@@ -457,36 +457,35 @@
       }
 
       var loggedTestOnce = false;
-      function centroidIn1a(geometry){
+      // Returns the acreage of the hexagon that falls INSIDE subarea 1a.
+      // Straddling hexagons return their partial (clipped) overlap area.
+      function acresIn1a(geometry, fullAcres){
         if (!subarea1aGeom) {
-          if (!loggedTestOnce) { console.warn("[1a] test skipped — subarea 1a geometry not loaded yet"); loggedTestOnce = true; }
-          return false;
+          if (!loggedTestOnce) { console.warn("[1a] measure skipped — subarea 1a geometry not loaded yet"); loggedTestOnce = true; }
+          return 0;
         }
         try {
-          // GeoJSON polygons don't always expose .centroid; fall back to extent center.
-          var c = geometry.centroid || (geometry.extent && geometry.extent.center);
-          if (!c) { console.warn("[1a] no centroid/center for hexagon"); return false; }
-
-          // Align spatial references if they differ.
-          var poly = subarea1aGeom;
-          var pt = c;
-          var polySR = poly.spatialReference && poly.spatialReference.wkid;
-          var ptSR = pt.spatialReference && pt.spatialReference.wkid;
-          if (polySR && ptSR && polySR !== ptSR) {
-            // Project the point to the polygon's SR using the engine if possible.
-            try { pt = geometryEngine.project ? geometryEngine.project(pt, poly.spatialReference) : pt; }
-            catch (e) { /* fall through */ }
+          var clipped = geometryEngine.intersect(subarea1aGeom, geometry);
+          if (!clipped) {
+            if (!loggedTestOnce) { console.log("[1a] first hexagon: no overlap with 1a"); loggedTestOnce = true; }
+            return 0; // no overlap
           }
+          // geodesicArea in square meters -> acres (1 sq m = 0.000247105 ac)
+          var sqMeters = Math.abs(geometryEngine.geodesicArea(clipped, "square-meters"));
+          var overlapAcres = sqMeters * 0.000247105381;
 
-          var inside = geometryEngine.contains(poly, pt) || geometryEngine.intersects(poly, pt);
+          // Guard against tiny FP overshoot past the hexagon's own area.
+          if (fullAcres && overlapAcres > fullAcres) overlapAcres = fullAcres;
+
           if (!loggedTestOnce) {
-            console.log("[1a] first test — polySR:", polySR, "ptSR:", ptSR, "inside:", inside);
+            console.log("[1a] first hexagon overlap:", overlapAcres.toFixed(2),
+                        "of", (fullAcres || 0).toFixed(2), "ac");
             loggedTestOnce = true;
           }
-          return inside;
+          return overlapAcres;
         } catch (e) {
-          console.warn("[1a] centroid test failed:", e);
-          return false;
+          console.warn("[1a] intersect/measure failed:", e);
+          return 0;
         }
       }
 
@@ -497,7 +496,8 @@
 
       function reevaluateSelections(){
         Object.keys(selections).forEach(function(id){
-          selections[id].in1a = centroidIn1a(selections[id].geometry);
+          var s = selections[id];
+          s.acres1a = acresIn1a(s.geometry, s.acres);
         });
         recomputeTotals();
       }
@@ -510,11 +510,11 @@
         Object.keys(selections).forEach(function(id){
           var s = selections[id];
           grand += s.acres;
-          // Only 1a acreage counts toward the tracked targets.
+          // ND: show all placed acreage (no goal). Targets: only the 1a overlap.
           if (TYPE_BY_KEY[s.type].target === null) {
-            totalsByType[s.type] += s.acres;          // ND: show all placed acreage
+            totalsByType[s.type] += s.acres;
           } else {
-            totalsByType[s.type] += s.in1a ? s.acres : 0;
+            totalsByType[s.type] += (s.acres1a || 0);
           }
         });
 
@@ -575,12 +575,13 @@
             attributes: { HEX_ID: hexId, type: activeType }
           });
           view.graphics.add(g);
+          var fullAcres = acresOf(attrs);
           selections[hexId] = {
             type: activeType,
             graphic: g,
             geometry: hit.graphic.geometry,
-            acres: acresOf(attrs),
-            in1a: centroidIn1a(hit.graphic.geometry)
+            acres: fullAcres,
+            acres1a: acresIn1a(hit.graphic.geometry, fullAcres)
           };
           recomputeTotals();
         }).catch(function(err){ console.error("hitTest:", err); });

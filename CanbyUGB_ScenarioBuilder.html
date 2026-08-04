@@ -376,10 +376,13 @@
       }).then(function(res){
         if (res.features.length) {
           subarea1aGeom = res.features[0].geometry;
+          console.log("[1a] loaded geometry, SR wkid:", subarea1aGeom.spatialReference && subarea1aGeom.spatialReference.wkid);
+          // If the user already painted before this loaded, re-evaluate those.
+          reevaluateSelections();
         } else {
-          console.warn("Subarea '" + TARGET_SUBAREA + "' not found via " + SUBAREA_FIELD);
+          console.warn("[1a] Subarea '" + TARGET_SUBAREA + "' not found via " + SUBAREA_FIELD + ". Check the exact field value/spelling.");
         }
-      }).catch(function(err){ console.error("subarea 1a query:", err); });
+      }).catch(function(err){ console.error("[1a] subarea query:", err); });
 
       // Build spotlight from subareas extent
       var subareaForMask = makeSubareasLayer();
@@ -453,14 +456,36 @@
         return (typeof sqft === "number" && sqft > 0) ? sqft / SQFT_PER_ACRE : 0;
       }
 
+      var loggedTestOnce = false;
       function centroidIn1a(geometry){
-        if (!subarea1aGeom) return false;
+        if (!subarea1aGeom) {
+          if (!loggedTestOnce) { console.warn("[1a] test skipped — subarea 1a geometry not loaded yet"); loggedTestOnce = true; }
+          return false;
+        }
         try {
-          var c = geometry.centroid;
-          if (!c) return false;
-          return geometryEngine.contains(subarea1aGeom, c);
+          // GeoJSON polygons don't always expose .centroid; fall back to extent center.
+          var c = geometry.centroid || (geometry.extent && geometry.extent.center);
+          if (!c) { console.warn("[1a] no centroid/center for hexagon"); return false; }
+
+          // Align spatial references if they differ.
+          var poly = subarea1aGeom;
+          var pt = c;
+          var polySR = poly.spatialReference && poly.spatialReference.wkid;
+          var ptSR = pt.spatialReference && pt.spatialReference.wkid;
+          if (polySR && ptSR && polySR !== ptSR) {
+            // Project the point to the polygon's SR using the engine if possible.
+            try { pt = geometryEngine.project ? geometryEngine.project(pt, poly.spatialReference) : pt; }
+            catch (e) { /* fall through */ }
+          }
+
+          var inside = geometryEngine.contains(poly, pt) || geometryEngine.intersects(poly, pt);
+          if (!loggedTestOnce) {
+            console.log("[1a] first test — polySR:", polySR, "ptSR:", ptSR, "inside:", inside);
+            loggedTestOnce = true;
+          }
+          return inside;
         } catch (e) {
-          console.warn("centroid test failed:", e);
+          console.warn("[1a] centroid test failed:", e);
           return false;
         }
       }
@@ -468,6 +493,13 @@
       function symbolFor(key){
         var c = TYPE_BY_KEY[key].color;
         return { type: "simple-fill", color: rgba(c, 0.75), outline: { color: [255,255,255,0.9], width: 1 } };
+      }
+
+      function reevaluateSelections(){
+        Object.keys(selections).forEach(function(id){
+          selections[id].in1a = centroidIn1a(selections[id].geometry);
+        });
+        recomputeTotals();
       }
 
       function recomputeTotals(){

@@ -174,13 +174,20 @@
       #panel {
         top: auto; bottom: 0; left: 0; right: 0;
         width: auto;
-        max-height: 46vh;
+        max-height: 62vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
         border-radius: 14px 14px 0 0;
         border-bottom: none;
-        padding: 10px 14px 14px 14px;
+        padding: 6px 14px calc(14px + env(safe-area-inset-bottom, 0px)) 14px;
+        z-index: 8;
       }
+      /* Hide the wordy header/hint on mobile to save vertical space */
+      #panel h3, #panel .hint { display: none; }
+      #panel .subhead { margin: 2px 0 8px 0; }
+
       /* Collapsed state shows just the handle + total */
-      #panel.collapsed { max-height: 92px; overflow: hidden; }
+      #panel.collapsed { max-height: 86px; overflow: hidden; }
 
       #sheetHandle {
         display: block;
@@ -376,11 +383,10 @@
       }).then(function(res){
         if (res.features.length) {
           subarea1aGeom = res.features[0].geometry;
-          console.log("[1a] loaded geometry, SR wkid:", subarea1aGeom.spatialReference && subarea1aGeom.spatialReference.wkid);
-          // If the user already painted before this loaded, re-evaluate those.
+          // Re-evaluate any hexagons painted before 1a finished loading.
           reevaluateSelections();
         } else {
-          console.warn("[1a] Subarea '" + TARGET_SUBAREA + "' not found via " + SUBAREA_FIELD + ". Check the exact field value/spelling.");
+          console.warn("[1a] Subarea '" + TARGET_SUBAREA + "' not found via " + SUBAREA_FIELD + ".");
         }
       }).catch(function(err){ console.error("[1a] subarea query:", err); });
 
@@ -456,32 +462,16 @@
         return (typeof sqft === "number" && sqft > 0) ? sqft / SQFT_PER_ACRE : 0;
       }
 
-      var loggedTestOnce = false;
       // Returns the acreage of the hexagon that falls INSIDE subarea 1a.
       // Straddling hexagons return their partial (clipped) overlap area.
       function acresIn1a(geometry, fullAcres){
-        if (!subarea1aGeom) {
-          if (!loggedTestOnce) { console.warn("[1a] measure skipped — subarea 1a geometry not loaded yet"); loggedTestOnce = true; }
-          return 0;
-        }
+        if (!subarea1aGeom) return 0;
         try {
           var clipped = geometryEngine.intersect(subarea1aGeom, geometry);
-          if (!clipped) {
-            if (!loggedTestOnce) { console.log("[1a] first hexagon: no overlap with 1a"); loggedTestOnce = true; }
-            return 0; // no overlap
-          }
-          // geodesicArea in square meters -> acres (1 sq m = 0.000247105 ac)
+          if (!clipped) return 0;
           var sqMeters = Math.abs(geometryEngine.geodesicArea(clipped, "square-meters"));
           var overlapAcres = sqMeters * 0.000247105381;
-
-          // Guard against tiny FP overshoot past the hexagon's own area.
           if (fullAcres && overlapAcres > fullAcres) overlapAcres = fullAcres;
-
-          if (!loggedTestOnce) {
-            console.log("[1a] first hexagon overlap:", overlapAcres.toFixed(2),
-                        "of", (fullAcres || 0).toFixed(2), "ac");
-            loggedTestOnce = true;
-          }
           return overlapAcres;
         } catch (e) {
           console.warn("[1a] intersect/measure failed:", e);
@@ -658,18 +648,18 @@
       view.ui.move("zoom", "top-left");
       view2.ui.move("zoom", "top-left");
 
-      // Mobile bottom-sheet collapse toggle
+      // Mobile bottom-sheet collapse toggle. Start EXPANDED so the
+      // scenario bars are visible immediately; collapsing is opt-in.
       var panelEl = document.getElementById("panel");
       var handle = document.getElementById("sheetHandle");
       var toggleLabel = document.getElementById("sheetToggleLabel");
-      function isMobile(){ return window.matchMedia("(max-width: 768px)").matches; }
-      if (isMobile()) panelEl.classList.add("collapsed");
       function toggleSheet(){
         panelEl.classList.toggle("collapsed");
         toggleLabel.textContent = panelEl.classList.contains("collapsed") ? "tap to expand" : "tap to collapse";
       }
       handle.addEventListener("click", toggleSheet);
       toggleLabel.addEventListener("click", toggleSheet);
+      toggleLabel.textContent = "tap to collapse";
 
       // Initialize panel numbers
       recomputeTotals();

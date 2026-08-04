@@ -52,6 +52,24 @@
       0 0 15px rgba(255, 255,255, 0.7);
     }
 
+    /* Results confirmation banner (top of results map) */
+    #resultsBanner {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 6;
+      background: rgba(51,51,187,0.94);
+      color: #fff;
+      text-align: center;
+      padding: 12px 16px;
+      font-size: 16px;
+      font-weight: 600;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      box-sizing: border-box;
+    }
+
     .close-button {
       position: absolute;
       top: 6px;
@@ -165,23 +183,6 @@
     }
     #applyButton:disabled { opacity: 0.6; cursor: default; }
 
-    #layerSelector {
-      display: none;
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      max-width: 260px;
-      z-index: 4;
-      background-color: rgba(255, 255, 255, 0.92);
-      padding: 14px;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    }
-
-    #layerSelector h3 { margin-top: 0; }
-    #layerSelector label { cursor: pointer; }
-    #layerSelector input { cursor: pointer; }
-
     /* ===== Mobile ===== */
     @media only screen and (max-width: 768px) {
       #banner {
@@ -206,19 +207,17 @@
         padding: 14px;
       }
 
-      /* Type picker becomes a horizontal chip strip along the bottom */
+      /* Type picker: 2-column grid pinned bottom, all options visible, no scroll */
       #typePicker {
         top: auto;
-        bottom: 76px;
+        bottom: 70px;
         left: 8px;
         right: 8px;
         width: auto;
-        padding: 8px 8px 6px 8px;
-        display: flex;
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        gap: 8px;
-        -webkit-overflow-scrolling: touch;
+        padding: 8px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
         border-radius: 10px;
       }
 
@@ -226,52 +225,39 @@
       #typePicker .hint { display: none; }
 
       .type-option {
-        flex: 0 0 auto;
         margin-bottom: 0;
-        padding: 8px 12px;
-        flex-direction: column;
-        gap: 5px;
-        min-width: 74px;
-        text-align: center;
-        white-space: normal;
+        padding: 8px 8px;
+        gap: 7px;
       }
 
       .type-option:hover { transform: none; }
 
-      .swatch { width: 22px; height: 22px; }
+      .swatch { width: 16px; height: 16px; }
 
-      .type-label { font-size: 11px; line-height: 1.15; }
+      .type-label { font-size: 11.5px; line-height: 1.15; }
 
       .check { display: none; }
 
+      /* Selection count spans both columns as its own row */
       #selectionCount {
-        position: absolute;
-        top: -30px;
-        left: 8px;
+        grid-column: 1 / -1;
         margin: 0;
-        padding: 4px 10px;
+        padding: 4px 4px 0 4px;
         border: none;
-        background: rgba(51,51,187,0.9);
-        color: #fff;
-        border-radius: 14px;
-        font-size: 12px;
+        text-align: center;
+        color: #3333bb;
       }
 
       #applyButton {
-        bottom: 14px;
+        bottom: 12px;
         right: 8px;
         left: 8px;
         min-width: 0;
         width: auto;
-        height: 48px;
+        height: 46px;
       }
 
-      #layerSelector {
-        top: 44px;
-        left: 8px;
-        right: 8px;
-        max-width: none;
-      }
+      #resultsBanner { font-size: 14px; padding: 10px 12px; }
     }
   </style>
 </head>
@@ -281,7 +267,7 @@
   <!-- Selection / paint map -->
   <div class="viewDiv" id="viewDiv1">
     <div class="welcome-box">
-      <p>Welcome! First choose a land use type, then tap the hexagons on the map where you'd like to see that use. Tap a hexagon again to clear it. You can switch types and keep going. When you're done, tap "Submit Selections" to add your input and see how the community has weighed in.</p>
+      <p>Welcome! First choose a land use type, then tap the hexagons on the map where you'd like to see that use. Tap a hexagon again to clear it. You can switch types and keep going. When you're done, tap "Submit Selections" to add your input.</p>
       <span class="close-button" onclick="document.querySelector('.welcome-box').style.display = 'none'">&times;</span>
     </div>
 
@@ -321,21 +307,7 @@
 
   <!-- Results map -->
   <div class="viewDiv" id="viewDiv2">
-    <div id="layerSelector">
-      <h3>View Results by Type</h3>
-      <input type="radio" id="viewall" name="layer" value="viewall" checked>
-      <label for="viewall">View All</label><br>
-      <input type="radio" id="sfstd" name="layer" value="SFSTD">
-      <label for="sfstd">Single-Family Standard Lot</label><br>
-      <input type="radio" id="sfsm" name="layer" value="SFSM">
-      <label for="sfsm">Single-Family Small Lot &amp; Cottages</label><br>
-      <input type="radio" id="th" name="layer" value="TH">
-      <label for="th">Townhomes/Plexes</label><br>
-      <input type="radio" id="mf" name="layer" value="MF">
-      <label for="mf">Multi-Family</label><br>
-      <input type="radio" id="nd" name="layer" value="ND">
-      <label for="nd">No Development</label>
-    </div>
+    <div id="resultsBanner">Thanks for submitting! Here are your selections.</div>
   </div>
 
   <script>
@@ -343,10 +315,12 @@
       "esri/Map",
       "esri/views/MapView",
       "esri/layers/FeatureLayer",
+      "esri/layers/GraphicsLayer",
       "esri/layers/GeoJSONLayer",
       "esri/Graphic",
+      "esri/geometry/Polygon",
       "esri/widgets/Home"
-    ], function(Map, MapView, FeatureLayer, GeoJSONLayer, Graphic, Home) {
+    ], function(Map, MapView, FeatureLayer, GraphicsLayer, GeoJSONLayer, Graphic, Polygon, Home) {
 
       // ---- Configuration -------------------------------------------------
       var GEOJSON_URL = "WS_Hexagons_5_Acres.geojson";
@@ -364,15 +338,11 @@
       };
       // --------------------------------------------------------------------
 
-      // Fallback extent used only until the hexagon extent is computed.
       var FALLBACK_EXTENT = {
         xmin: -122.72, ymin: 45.24, xmax: -122.61, ymax: 45.29,
         spatialReference: { wkid: 4326 }
       };
 
-      // Symbol builders for the context layers. Called per-map so each map
-      // gets its OWN layer instances (a layer object can only live in one
-      // map at a time — sharing instances is what made them vanish before).
       function makeUgbLayer() {
         return new FeatureLayer({
           url: UGB_URL,
@@ -380,7 +350,7 @@
             type: "simple",
             symbol: {
               type: "simple-fill",
-              color: [220, 220, 220, 0.1],
+              color: [220, 220, 220, 0.05],
               outline: { color: [0, 0, 255, 1], width: 2.5 }
             }
           }
@@ -417,17 +387,56 @@
         extent: FALLBACK_EXTENT
       });
 
-      // Home widgets — return to the hexagon starting extent.
+      // Home widgets
       var homeBtn1 = new Home({ view: view });
       var homeBtn2 = new Home({ view: view2 });
       view.ui.add(homeBtn1, "top-left");
       view2.ui.add(homeBtn2, "top-left");
 
+      // --- Spotlight mask: dim everything OUTSIDE the study area (~35%). ---
+      // Built as a big outer ring with the subareas' extent as an inner hole.
+      // Added to BOTH maps (separate graphics each).
+      function buildMaskGraphic(innerExtent) {
+        var pad = 2; // degrees of world padding around the hole
+        var outerRing = [
+          [innerExtent.xmin - pad, innerExtent.ymin - pad],
+          [innerExtent.xmax + pad, innerExtent.ymin - pad],
+          [innerExtent.xmax + pad, innerExtent.ymax + pad],
+          [innerExtent.xmin - pad, innerExtent.ymax + pad],
+          [innerExtent.xmin - pad, innerExtent.ymin - pad]
+        ];
+        // Hole must wind opposite to the outer ring to punch through.
+        var hole = [
+          [innerExtent.xmin, innerExtent.ymin],
+          [innerExtent.xmin, innerExtent.ymax],
+          [innerExtent.xmax, innerExtent.ymax],
+          [innerExtent.xmax, innerExtent.ymin],
+          [innerExtent.xmin, innerExtent.ymin]
+        ];
+        var maskPoly = new Polygon({
+          rings: [outerRing, hole],
+          spatialReference: { wkid: 4326 }
+        });
+        return new Graphic({
+          geometry: maskPoly,
+          symbol: {
+            type: "simple-fill",
+            color: [0, 0, 0, 0.35],   // light dim outside AOI
+            outline: { width: 0, color: [0,0,0,0] }
+          }
+        });
+      }
+
+      var maskLayer1 = new GraphicsLayer();  // selection map
+      var maskLayer2 = new GraphicsLayer();  // results map
+      map.add(maskLayer1);
+      map2.add(maskLayer2);
+
       // Context layers — separate instances per map.
       map.add(makeUgbLayer());
       map.add(makeSubareasLayer());
 
-      // Hexagon click layer (selection map only).
+      // Hexagon click layer — grey outline, 80% white fill (frosted, clickable).
       var hexLayer = new GeoJSONLayer({
         url: GEOJSON_URL,
         outFields: ["*"],
@@ -435,15 +444,14 @@
           type: "simple",
           symbol: {
             type: "simple-fill",
-            color: [0, 0, 0, 0],
-            outline: { color: [255, 255, 255, 0.6], width: 1 }
+            color: [255, 255, 255, 0.8],
+            outline: { color: [110, 110, 110, 0.9], width: 1 }
           }
         }
       });
       map.add(hexLayer);
 
-      // Zoom both maps to the hexagon extent once it's known, and set that
-      // as the Home extent for both.
+      // Zoom to hexagon extent; also build the mask from the subareas extent.
       hexLayer.when(function() {
         return hexLayer.queryExtent();
       }).then(function(result) {
@@ -456,6 +464,27 @@
         }
       }).catch(function(err) {
         console.error("Could not compute hexagon extent:", err);
+      });
+
+      // Build the spotlight hole from the SUBAREAS extent (the true AOI).
+      // Falls back to hexagon extent if subareas query fails.
+      var subareaForMask = makeSubareasLayer();
+      subareaForMask.load().then(function() {
+        return subareaForMask.queryExtent();
+      }).then(function(result) {
+        var hole = (result && result.extent)
+          ? result.extent.expand(1.1)
+          : null;
+        if (!hole) {
+          return hexLayer.queryExtent().then(function(r) { return r.extent.expand(1.1); });
+        }
+        return hole;
+      }).then(function(hole) {
+        if (!hole) return;
+        maskLayer1.add(buildMaskGraphic(hole));
+        maskLayer2.add(buildMaskGraphic(hole));
+      }).catch(function(err) {
+        console.error("Could not build spotlight mask:", err);
       });
 
       // ===== Type-then-paint state =====
@@ -524,14 +553,14 @@
             attributes: { HEX_ID: hexId, type: activeType }
           });
           view.graphics.add(g);
-          selections[hexId] = { type: activeType, graphic: g };
+          selections[hexId] = { type: activeType, graphic: g, geometry: hit.graphic.geometry };
           updateSelectionCount();
         }).catch(function(err) {
           console.error("hitTest error:", err);
         });
       });
 
-      // ===== Counter layer + submit =====
+      // ===== Counter increment (still writes to AGOL) =====
       var counterFields = ["OBJECTID", JOIN_FIELD].concat(Object.keys(TYPES));
       var counterLayer = new FeatureLayer({
         url: HEX_COUNTER_URL,
@@ -568,6 +597,26 @@
         });
       }
 
+      // Draw the user's own picks onto the results map.
+      function showOwnSelections(picked) {
+        var popupTemplate = {
+          title: "Your selection",
+          content: "You selected: {typeLabel}"
+        };
+        picked.forEach(function(sel) {
+          var g = new Graphic({
+            geometry: sel.geometry,
+            symbol: symbolFor(sel.type),
+            attributes: {
+              HEX_ID: sel.hexId,
+              typeLabel: TYPES[sel.type].label
+            },
+            popupTemplate: popupTemplate
+          });
+          view2.graphics.add(g);
+        });
+      }
+
       document.getElementById("applyButton").addEventListener("click", function() {
         var ids = Object.keys(selections);
         if (ids.length === 0) {
@@ -579,6 +628,15 @@
         btn.disabled = true;
         btn.textContent = "Submitting...";
 
+        // Snapshot the user's picks BEFORE clearing, to redraw on results map.
+        var picked = ids.map(function(hexId) {
+          return {
+            hexId: hexId,
+            type: selections[hexId].type,
+            geometry: selections[hexId].geometry
+          };
+        });
+
         var jobs = ids.map(function(hexId) {
           return incrementHex(hexId, selections[hexId].type);
         });
@@ -588,15 +646,16 @@
           selections = {};
           updateSelectionCount();
 
+          // Draw their own picks on the results map.
+          showOwnSelections(picked);
+
           var mv1 = document.getElementById("viewDiv1");
           var mv2 = document.getElementById("viewDiv2");
           mv1.style.zIndex = 1;
           mv1.style.pointerEvents = "none";
           mv2.style.zIndex = 5;
           mv2.style.pointerEvents = "auto";
-          document.getElementById("layerSelector").style.display = "block";
-
-          refreshResults();
+          document.getElementById("resultsBanner").style.display = "block";
         }).catch(function(err) {
           console.error("Submit error:", err);
           alert("Something went wrong submitting your selections. Please try again.");
@@ -605,94 +664,9 @@
         });
       });
 
-      // ===== Results map rendering =====
-      var popupTemplate = {
-        title: "Hexagon Results",
-        content: [{
-          type: "text",
-          text:
-            "Single-Family Standard Lot: {SFSTD}<br>" +
-            "Single-Family Small Lot & Cottages: {SFSM}<br>" +
-            "Townhomes/Plexes: {TH}<br>" +
-            "Multi-Family: {MF}<br>" +
-            "No Development: {ND}"
-        }]
-      };
-
-      var resultLayers = {};
-      Object.keys(TYPES).forEach(function(field) {
-        var c = TYPES[field].color;
-        var layer = new FeatureLayer({
-          url: HEX_COUNTER_URL,
-          outFields: counterFields,
-          popupTemplate: popupTemplate,
-          renderer: {
-            type: "simple",
-            symbol: {
-              type: "simple-fill",
-              color: [c[0], c[1], c[2], 0.8],
-              outline: { color: [128, 128, 128, 0.4], width: 1 }
-            },
-            visualVariables: [{
-              type: "color",
-              field: field,
-              legendOptions: { title: TYPES[field].label },
-              stops: [
-                { value: 0, color: [c[0], c[1], c[2], 0] },
-                { value: 10, color: [c[0], c[1], c[2], 0.85] }
-              ]
-            }]
-          }
-        });
-        resultLayers[field] = layer;
-        map2.add(layer);
-      });
-
-      // Context layers on the results map — separate instances again.
+      // Results map context layers — separate instances.
       map2.add(makeSubareasLayer());
       map2.add(makeUgbLayer());
-
-      function getMaxValue(layer, field) {
-        var query = layer.createQuery();
-        query.outStatistics = [{
-          onStatisticField: field,
-          outStatisticFieldName: "max_" + field,
-          statisticType: "max"
-        }];
-        return layer.queryFeatures(query).then(function(response) {
-          var v = response.features[0].attributes["max_" + field];
-          return v || 0;
-        });
-      }
-
-      function refreshResults() {
-        Object.keys(TYPES).forEach(function(field) {
-          var layer = resultLayers[field];
-          var c = TYPES[field].color;
-          getMaxValue(layer, field).then(function(maxVal) {
-            var top = maxVal > 0 ? maxVal : 1;
-            layer.renderer = layer.renderer.clone();
-            layer.renderer.visualVariables = [{
-              type: "color",
-              field: field,
-              legendOptions: { title: TYPES[field].label },
-              stops: [
-                { value: 0, color: [c[0], c[1], c[2], 0] },
-                { value: top, color: [c[0], c[1], c[2], 0.85] }
-              ]
-            }];
-          });
-        });
-      }
-
-      document.querySelectorAll('input[name="layer"]').forEach(function(radio) {
-        radio.addEventListener("change", function(event) {
-          var sel = event.target.value;
-          Object.keys(resultLayers).forEach(function(field) {
-            resultLayers[field].visible = (sel === "viewall" || sel === field);
-          });
-        });
-      });
 
       view.ui.move("zoom", "top-left");
       view2.ui.move("zoom", "top-left");

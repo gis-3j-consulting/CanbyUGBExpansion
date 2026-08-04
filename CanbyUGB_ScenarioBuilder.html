@@ -341,8 +341,10 @@
 
       var homeBtn1 = new Home({ view: view });
       var homeBtn2 = new Home({ view: view2 });
-      view.ui.add(homeBtn1, "top-left");
-      view2.ui.add(homeBtn2, "top-left");
+      var onMobile = window.matchMedia("(max-width: 768px)").matches;
+      var uiCorner = onMobile ? "top-left" : "top-right";
+      view.ui.add(homeBtn1, uiCorner);
+      view2.ui.add(homeBtn2, uiCorner);
 
       // Spotlight mask
       function buildMaskGraphic(innerExtent) {
@@ -604,11 +606,11 @@
       });
 
       // Results map context layers
-      map2.add(makeSubareasLayer());
       map2.add(makeUgbLayer());
+      map2.add(makeSubareasLayer());
 
-      view.ui.move("zoom", "top-left");
-      view2.ui.move("zoom", "top-left");
+      view.ui.move("zoom", uiCorner);
+      view2.ui.move("zoom", uiCorner);
 
       // Mobile bottom-sheet collapse toggle. Start EXPANDED so the
       // scenario bars are visible immediately; collapsing is opt-in.

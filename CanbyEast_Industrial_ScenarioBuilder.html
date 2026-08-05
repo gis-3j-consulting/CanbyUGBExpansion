@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Canby East — Industrial Scenario Builder</title>
+  <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css">
+  <script src="https://js.arcgis.com/4.29/"></script>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; font-family: "Avenir Next", "Segoe UI", sans-serif; }
+
+    .viewDiv {
+      height: 90vh;
+      width: 100%;
+      margin: 0; padding: 0;
+      position: absolute;
+      background-color: white;
+    }
+
+    #viewDiv1 { z-index: 4; }
+    #viewDiv2 { z-index: 1; pointer-events: none; }
+
+    .welcome-box {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: white;
+      padding: 16px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+      z-index: 7;
+      max-width: 360px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    #banner {
+      display: none;   /* desktop: title lives in the panel instead */
+      position: absolute;
+      top: 20px; right: 5%;
+      max-width: 45%;
+      z-index: 5; margin: 0;
+      text-align: right;
+      font-size: 24px;
+      text-shadow: 0 0 8px rgba(255,255,255,1), 0 0 15px rgba(255,255,255,0.7);
+    }
+
+    /* Title at the top of the panel (desktop only) */
+    #panelTitle {
+      margin: 0 0 10px 0;
+      font-size: 18px; font-weight: 700; color: #1a1a1a;
+      line-height: 1.2;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #3333bb;
+    }
+
+    #resultsBanner {
+      display: none;
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      z-index: 6;
+      background: rgba(51,51,187,0.94);
+      color: #fff; text-align: center;
+      padding: 12px 16px;
+      font-size: 16px; font-weight: 600;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      box-sizing: border-box;
+    }
+
+    .close-button {
+      position: absolute;
+      top: 6px; right: 10px;
+      cursor: pointer; font-size: 20px; color: #666;
+    }
+
+    /* ===== Combined picker + progress panel (top-left) ===== */
+    #panel {
+      position: absolute;
+      top: 20px; left: 20px;
+      width: 300px;
+      z-index: 5;
+      background-color: rgba(255,255,255,0.96);
+      padding: 14px;
+      border: 1px solid #d0d0d0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      border-radius: 10px;
+      font-size: 14px;
+      box-sizing: border-box;
+      max-height: 82vh;
+      overflow-y: auto;
+    }
+
+    #panel h3 { margin: 0 0 2px 0; font-size: 15px; }
+    #panel .hint { margin: 0 0 10px 0; font-size: 12px; color: #666; }
+    #panel .subhead {
+      margin: 4px 0 8px 0; font-size: 11px; font-weight: 700;
+      color: #3333bb; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+
+    /* A type row is BOTH the selectable button and its progress readout */
+    .type-row {
+      padding: 8px 9px;
+      margin-bottom: 7px;
+      cursor: pointer;
+      border-radius: 8px;
+      border: 1.5px solid #d5d5d5;
+      background: #fff;
+      transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+      user-select: none;
+    }
+    .type-row:hover { border-color: #4444cc; background: #f5f5ff; }
+    .type-row.active {
+      border-color: #3333bb; background: #eeeeff;
+      box-shadow: inset 0 0 0 1px #3333bb;
+    }
+
+    .type-head { display: flex; align-items: center; gap: 8px; }
+    .swatch {
+      width: 16px; height: 16px; border-radius: 4px;
+      border: 1px solid rgba(0,0,0,0.3); flex: 0 0 auto;
+    }
+    .type-name { flex: 1 1 auto; line-height: 1.2; font-size: 13px; }
+    .type-acres { flex: 0 0 auto; font-size: 12px; color: #333; font-variant-numeric: tabular-nums; }
+    .type-acres b { font-weight: 700; }
+
+    /* progress bar with a target tick */
+    .bar-track {
+      position: relative;
+      margin-top: 7px; height: 8px;
+      background: #e6e6e6; border-radius: 5px; overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%; width: 0%;
+      background: #4a90d9;
+      border-radius: 5px;
+      transition: width 0.2s ease;
+    }
+    /* Target marker — a subtle vertical line sitting at the target value.
+       Positioned at 75% since bar max = target / 0.75. overflow on the
+       track is visible so the tick isn't clipped. */
+    .bar-track { overflow: visible; }
+    .bar-fill { border-radius: 5px 0 0 5px; }
+    .bar-tick {
+      position: absolute;
+      top: -2px; bottom: -2px;
+      left: 75%;
+      width: 2px;
+      background: rgba(40,40,40,0.55);
+      border-radius: 1px;
+      pointer-events: none;
+    }
+
+    /* Park row — no target, no bar */
+    .type-row.no-goal { border-style: dashed; }
+    .no-goal-tag {
+      font-size: 10px; color: #888; font-style: italic;
+    }
+
+    #grandTotal {
+      margin-top: 6px; padding-top: 10px;
+      border-top: 1px solid #e5e5e5;
+      font-size: 13px; font-weight: 600; color: #222;
+    }
+
+    #applyButton {
+      position: absolute;
+      bottom: 26px; right: 26px;
+      z-index: 5;
+      height: 46px; min-width: 150px; padding: 0 18px;
+      background-color: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      border-radius: 10px;
+      border: 1.5px solid #3333bb;
+      color: #3333bb; cursor: pointer;
+      font-size: 15px; font-weight: 600;
+    }
+    #applyButton:hover { background-color: #3333bb; color: #fff; box-shadow: 0 5px 10px rgba(0,0,0,0.4); }
+    #applyButton:disabled { opacity: 0.6; cursor: default; }
+
+    /* Results-screen legend (top-left, mirrors the build panel spot) */
+    #resultsLegend {
+      display: none;
+      position: absolute;
+      top: 62px; left: 20px;
+      width: 250px;
+      z-index: 6;
+      background-color: rgba(255,255,255,0.96);
+      padding: 14px;
+      border: 1px solid #d0d0d0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      border-radius: 10px;
+      font-size: 13px;
+      box-sizing: border-box;
+    }
+    #resultsLegend h4 {
+      margin: 0 0 10px 0; font-size: 14px; font-weight: 700; color: #1a1a1a;
+    }
+    #resultsLegend .legend-row {
+      display: flex; align-items: center; gap: 9px; margin-bottom: 7px;
+    }
+    #resultsLegend .legend-row:last-child { margin-bottom: 0; }
+    #resultsLegend .swatch {
+      width: 16px; height: 16px; border-radius: 4px;
+      border: 1px solid rgba(0,0,0,0.3); flex: 0 0 auto;
+    }
+
+    /* ===== Mobile: panel becomes a collapsible bottom sheet ===== */
+    @media only screen and (max-width: 768px) {
+      #banner {
+        display: block;   /* mobile: bring back the title strip */
+        top: 0; left: 0; right: 0; max-width: 100%;
+        text-align: center; font-size: 16px;
+        padding: 8px 10px; box-sizing: border-box;
+        background: rgba(255,255,255,0.92);
+        text-shadow: none; border-bottom: 1px solid #ddd;
+        z-index: 6;
+      }
+      #panelTitle { display: none; }  /* mobile uses the strip, not the panel title */
+
+      /* Nudge the map UI widgets (zoom/home) down so they clear the title strip */
+      .esri-ui-top-left { margin-top: 44px; }
+
+      .viewDiv { top: 0; }
+      .welcome-box { max-width: 84%; font-size: 13px; }
+
+      #panel {
+        top: auto; bottom: 0; left: 0; right: 0;
+        width: auto;
+        max-height: 62vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        border-radius: 14px 14px 0 0;
+        border-bottom: none;
+        padding: 6px 14px calc(14px + env(safe-area-inset-bottom, 0px)) 14px;
+        z-index: 8;
+      }
+      /* Hide the wordy header/hint on mobile to save vertical space */
+      #panel h3, #panel .hint { display: none; }
+      #panel .subhead { margin: 2px 0 8px 0; }
+
+      /* Collapsed state shows just the handle + total */
+      #panel.collapsed { max-height: 86px; overflow: hidden; }
+
+      #sheetHandle {
+        display: block;
+        text-align: center;
+        padding: 2px 0 8px 0;
+        cursor: pointer;
+      }
+      #sheetHandle::before {
+        content: ""; display: inline-block;
+        width: 40px; height: 4px; border-radius: 2px;
+        background: #ccc;
+      }
+      #sheetToggleLabel {
+        display: block; text-align: center;
+        font-size: 11px; color: #888; margin: -4px 0 6px 0;
+      }
+
+      #applyButton {
+        bottom: auto; top: 44px; right: 8px;
+        min-width: 0; height: 40px; padding: 0 14px;
+        font-size: 13px;
+      }
+      #resultsBanner { font-size: 14px; padding: 10px 12px; }
+      #resultsLegend {
+        top: 46px; left: 8px; right: 8px; width: auto;
+        max-width: 220px;
+      }
+    }
+    /* Handle only shows on mobile */
+    #sheetHandle, #sheetToggleLabel { display: none; }
+  </style>
+</head>
+<body>
+  <h1 id="banner">Canby East Industrial</h1>
+
+  <!-- Selection / paint map -->
+  <div class="viewDiv" id="viewDiv1">
+    <div class="welcome-box">
+      <p>Welcome! Choose a land use type, then tap hexagons to place it. As you build your scenario, the panel tracks how many acres you've placed of each type. Tap a hexagon again to clear it. When you're done, tap "Submit Scenario."</p>
+      <span class="close-button" onclick="document.querySelector('.welcome-box').style.display='none'">&times;</span>
+    </div>
+
+    <div id="panel">
+      <div id="sheetHandle"></div>
+      <span id="sheetToggleLabel">tap to expand</span>
+      <div id="panelTitle">Canby East Industrial</div>
+      <h3>Build your scenario</h3>
+      <p class="hint">Pick a type, then tap hexagons on the map.</p>
+      <div class="subhead">Land use options</div>
+      <div id="rows"></div>
+      <div id="grandTotal">Total placed: 0.0 acres</div>
+    </div>
+
+    <button id="applyButton">Submit Scenario</button>
+  </div>
+
+  <!-- Results map -->
+  <div class="viewDiv" id="viewDiv2">
+    <div id="resultsBanner">Thanks for your response! Please return to the survey.</div>
+    <div id="resultsLegend"></div>
+  </div>
+
+  <script>
+    require([
+      "esri/Map",
+      "esri/views/MapView",
+      "esri/layers/FeatureLayer",
+      "esri/layers/GraphicsLayer",
+      "esri/layers/GeoJSONLayer",
+      "esri/Graphic",
+      "esri/geometry/Polygon",
+      "esri/geometry/geometryEngine",
+      "esri/widgets/Home"
+    ], function(Map, MapView, FeatureLayer, GraphicsLayer, GeoJSONLayer, Graphic, Polygon, geometryEngine, Home) {
+
+      // ---- Configuration -------------------------------------------------
+      var GEOJSON_URL = "WS_East_Hexagons_5_Acres.geojson";
+      var HEX_COUNTER_URL = "https://services3.arcgis.com/pZZTDhBBLO3B9dnl/arcgis/rest/services/East_Subareas_Hexagons_5_acres/FeatureServer/2";
+      var UGB_URL = "https://services3.arcgis.com/pZZTDhBBLO3B9dnl/arcgis/rest/services/Canby_UGB/FeatureServer/1";
+      var SUBAREAS_URL = "https://services3.arcgis.com/pZZTDhBBLO3B9dnl/arcgis/rest/services/Subareas_Industrial_Dissolve/FeatureServer/2";
+      var JOIN_FIELD = "HEX_ID";
+      var AREA_FIELD = "Shape_Area";      // square feet
+      var SQFT_PER_ACRE = 43560;
+
+      // No goals in this version — both types are target: null.
+      var TICK_FRAC = 0.75; // unused here (no bars), kept for shared code parity
+
+      var TYPES = [
+        { key: "LI", label: "Light Industrial", color: [175,141,195], target: null },
+        { key: "HI", label: "Heavy Industrial", color: [84,39,136],   target: null }
+      ];
+      var TYPE_BY_KEY = {};
+      TYPES.forEach(function(t){ TYPE_BY_KEY[t.key] = t; });
+      // --------------------------------------------------------------------
+
+      var FALLBACK_EXTENT = {
+        xmin: -122.72, ymin: 45.24, xmax: -122.61, ymax: 45.29,
+        spatialReference: { wkid: 4326 }
+      };
+
+      function rgba(c, a){ return [c[0], c[1], c[2], a]; }
+
+      function makeUgbLayer() {
+        return new FeatureLayer({
+          url: UGB_URL,
+          renderer: { type: "simple", symbol: {
+            type: "simple-fill", color: [220,220,220,0.05],
+            outline: { color: [0,0,0,1], width: 2.5 } } }
+        });
+      }
+      function makeSubareasLayer() {
+        return new FeatureLayer({
+          url: SUBAREAS_URL,
+          renderer: { type: "simple", symbol: {
+            type: "simple-fill", color: [0,0,255,0],
+            outline: { color: [255,0,255,1], width: 2 } } }
+        });
+      }
+
+      // ===== Maps =====
+      var map = new Map({ basemap: "hybrid" });
+      var view = new MapView({ container: "viewDiv1", map: map, extent: FALLBACK_EXTENT });
+      var map2 = new Map({ basemap: "hybrid" });
+      var view2 = new MapView({ container: "viewDiv2", map: map2, extent: FALLBACK_EXTENT });
+
+      var homeBtn1 = new Home({ view: view });
+      var homeBtn2 = new Home({ view: view2 });
+      var onMobile = window.matchMedia("(max-width: 768px)").matches;
+      var uiCorner = onMobile ? "top-left" : "top-right";
+      view.ui.add(homeBtn1, uiCorner);
+      view2.ui.add(homeBtn2, uiCorner);
+
+      // Spotlight mask
+      function buildMaskGraphic(innerExtent) {
+        var pad = 2;
+        var outerRing = [
+          [innerExtent.xmin - pad, innerExtent.ymin - pad],
+          [innerExtent.xmax + pad, innerExtent.ymin - pad],
+          [innerExtent.xmax + pad, innerExtent.ymax + pad],
+          [innerExtent.xmin - pad, innerExtent.ymax + pad],
+          [innerExtent.xmin - pad, innerExtent.ymin - pad]
+        ];
+        var hole = [
+          [innerExtent.xmin, innerExtent.ymin],
+          [innerExtent.xmin, innerExtent.ymax],
+          [innerExtent.xmax, innerExtent.ymax],
+          [innerExtent.xmax, innerExtent.ymin],
+          [innerExtent.xmin, innerExtent.ymin]
+        ];
+        return new Graphic({
+          geometry: new Polygon({ rings: [outerRing, hole], spatialReference: { wkid: 4326 } }),
+          symbol: { type: "simple-fill", color: [0,0,0,0.35], outline: { width: 0, color: [0,0,0,0] } }
+        });
+      }
+      var maskLayer1 = new GraphicsLayer();
+      var maskLayer2 = new GraphicsLayer();
+      map.add(maskLayer1);
+      map2.add(maskLayer2);
+
+      map.add(makeUgbLayer());
+      map.add(makeSubareasLayer());
+
+      // Hexagon click layer — grey outline, 80% white fill
+      var hexLayer = new GeoJSONLayer({
+        url: GEOJSON_URL,
+        outFields: ["*"],
+        renderer: { type: "simple", symbol: {
+          type: "simple-fill", color: [255,255,255,0.35],
+          outline: { color: [110,110,110,0.95], width: 1 } } }
+      });
+      map.add(hexLayer);
+
+      hexLayer.when(function(){ return hexLayer.queryExtent(); })
+        .then(function(result){
+          if (result && result.extent) {
+            var ext = result.extent.expand(1.15);
+            view.goTo(ext); view2.goTo(ext);
+            homeBtn1.viewpoint = { targetGeometry: ext };
+            homeBtn2.viewpoint = { targetGeometry: ext };
+          }
+        }).catch(function(err){ console.error("hex extent:", err); });
+
+      // Build spotlight from subareas extent
+      var subareaForMask = makeSubareasLayer();
+      subareaForMask.load().then(function(){ return subareaForMask.queryExtent(); })
+        .then(function(result){
+          var hole = (result && result.extent) ? result.extent.expand(1.1) : null;
+          if (!hole) return hexLayer.queryExtent().then(function(r){ return r.extent.expand(1.1); });
+          return hole;
+        }).then(function(hole){
+          if (!hole) return;
+          maskLayer1.add(buildMaskGraphic(hole));
+          maskLayer2.add(buildMaskGraphic(hole));
+        }).catch(function(err){ console.error("mask:", err); });
+
+      // ===== Build the panel rows =====
+      var rowsEl = document.getElementById("rows");
+      var rowEls = {};
+      TYPES.forEach(function(t){
+        var row = document.createElement("div");
+        row.className = "type-row";
+        row.setAttribute("data-type", t.key);
+
+        var head = document.createElement("div");
+        head.className = "type-head";
+        var sw = document.createElement("span");
+        sw.className = "swatch";
+        sw.style.background = "rgba(" + t.color[0] + "," + t.color[1] + "," + t.color[2] + ",0.85)";
+        var nm = document.createElement("span");
+        nm.className = "type-name";
+        nm.textContent = t.label;
+        var ac = document.createElement("span");
+        ac.className = "type-acres";
+        head.appendChild(sw); head.appendChild(nm); head.appendChild(ac);
+        row.appendChild(head);
+
+        if (t.target !== null) {
+          var track = document.createElement("div");
+          track.className = "bar-track";
+          var fill = document.createElement("div");
+          fill.className = "bar-fill";
+          var tick = document.createElement("div");
+          tick.className = "bar-tick";   // sits at 75% via CSS (= target)
+          track.appendChild(fill);
+          track.appendChild(tick);
+          row.appendChild(track);
+          rowEls[t.key] = { row: row, acres: ac, fill: fill };
+        } else {
+          rowEls[t.key] = { row: row, acres: ac, fill: null };
+        }
+
+        row.addEventListener("click", function(){
+          activeType = t.key;
+          Object.keys(rowEls).forEach(function(k){ rowEls[k].row.classList.remove("active"); });
+          row.classList.add("active");
+        });
+
+        rowsEl.appendChild(row);
+      });
+
+      // ===== Paint state =====
+      var activeType = null;
+      // selections[hexId] = { type, graphic, geometry, acres }
+      var selections = {};
+
+      function acresOf(attrs){
+        var sqft = attrs[AREA_FIELD];
+        return (typeof sqft === "number" && sqft > 0) ? sqft / SQFT_PER_ACRE : 0;
+      }
+
+      function symbolFor(key){
+        var c = TYPE_BY_KEY[key].color;
+        return { type: "simple-fill", color: rgba(c, 0.75), outline: { color: [255,255,255,0.9], width: 1 } };
+      }
+
+      function recomputeTotals(){
+        var totalsByType = {};
+        TYPES.forEach(function(t){ totalsByType[t.key] = 0; });
+        var grand = 0;
+
+        Object.keys(selections).forEach(function(id){
+          var s = selections[id];
+          grand += s.acres;
+          totalsByType[s.type] += s.acres;   // full hexagon acreage, all types
+        });
+
+        TYPES.forEach(function(t){
+          var el = rowEls[t.key];
+          var placed = totalsByType[t.key];
+          if (t.target === null) {
+            el.acres.innerHTML = "<b>" + placed.toFixed(1) + "</b> ac";
+            return;
+          }
+          el.acres.innerHTML = "<b>" + placed.toFixed(1) + "</b> / " + t.target + " ac";
+          // Bar max = target / TICK_FRAC so the target tick sits at TICK_FRAC (75%).
+          var barMax = t.target / TICK_FRAC;
+          var pct = Math.min(100, (placed / barMax) * 100);
+          el.fill.style.width = pct + "%";
+        });
+
+        document.getElementById("grandTotal").textContent =
+          "Total placed: " + grand.toFixed(1) + " acres";
+      }
+
+      view.on("click", function(event){
+        view.hitTest(event).then(function(response){
+          var hit = response.results.find(function(r){
+            return r.graphic && r.graphic.layer === hexLayer;
+          });
+          if (!hit) return;
+          if (!activeType) { alert("Pick a land use type first, then tap hexagons."); return; }
+
+          var attrs = hit.graphic.attributes;
+          var hexId = attrs[JOIN_FIELD];
+          if (hexId === undefined || hexId === null) {
+            console.warn("hexagon missing " + JOIN_FIELD, attrs); return;
+          }
+
+          var existing = selections[hexId];
+          if (existing && existing.type === activeType) {
+            view.graphics.remove(existing.graphic);
+            delete selections[hexId];
+            recomputeTotals();
+            return;
+          }
+          if (existing) view.graphics.remove(existing.graphic);
+
+          var g = new Graphic({
+            geometry: hit.graphic.geometry,
+            symbol: symbolFor(activeType),
+            attributes: { HEX_ID: hexId, type: activeType }
+          });
+          view.graphics.add(g);
+          selections[hexId] = {
+            type: activeType,
+            graphic: g,
+            geometry: hit.graphic.geometry,
+            acres: acresOf(attrs)
+          };
+          recomputeTotals();
+        }).catch(function(err){ console.error("hitTest:", err); });
+      });
+
+      // ===== Counter increment (writes to AGOL, all placements) =====
+      var counterFields = ["OBJECTID", JOIN_FIELD].concat(TYPES.map(function(t){ return t.key; }));
+      var counterLayer = new FeatureLayer({ url: HEX_COUNTER_URL, outFields: counterFields });
+
+      function incrementHex(hexId, typeField){
+        var q = counterLayer.createQuery();
+        q.where = JOIN_FIELD + " = " + hexId;
+        q.outFields = counterFields;
+        q.returnGeometry = false;
+        return counterLayer.queryFeatures(q).then(function(result){
+          if (!result.features.length) { console.warn("no row for " + hexId); return; }
+          var f = result.features[0];
+          var current = f.attributes[typeField] || 0;
+          var upd = { OBJECTID: f.attributes.OBJECTID };
+          upd[typeField] = current + 1;
+          return counterLayer.applyEdits({ updateFeatures: [ new Graphic({ attributes: upd }) ] })
+            .then(function(res){
+              var r = res.updateFeatureResults && res.updateFeatureResults[0];
+              if (r && r.error) console.error("applyEdits error " + hexId + ":", r.error);
+            });
+        }).catch(function(err){ console.error("increment " + hexId + ":", err); });
+      }
+
+      function showOwnSelections(picked){
+        var popupTemplate = { title: "Your selection", content: "You placed: {typeLabel}" };
+        picked.forEach(function(sel){
+          view2.graphics.add(new Graphic({
+            geometry: sel.geometry,
+            symbol: symbolFor(sel.type),
+            attributes: { HEX_ID: sel.hexId, typeLabel: TYPE_BY_KEY[sel.type].label },
+            popupTemplate: popupTemplate
+          }));
+        });
+      }
+
+      // Build the static color key shown on the results screen (all types).
+      function buildResultsLegend(){
+        var legend = document.getElementById("resultsLegend");
+        var html = "<h4>What the colors mean</h4>";
+        TYPES.forEach(function(t){
+          html += '<div class="legend-row">' +
+                    '<span class="swatch" style="background:rgba(' +
+                      t.color[0] + ',' + t.color[1] + ',' + t.color[2] + ',0.85)"></span>' +
+                    '<span>' + t.label + '</span>' +
+                  '</div>';
+        });
+        legend.innerHTML = html;
+      }
+
+      document.getElementById("applyButton").addEventListener("click", function(){
+        var ids = Object.keys(selections);
+        if (ids.length === 0) { alert("No selections yet — pick a type and tap some hexagons first."); return; }
+        var btn = this;
+        btn.disabled = true; btn.textContent = "Submitting...";
+
+        var picked = ids.map(function(id){
+          return { hexId: id, type: selections[id].type, geometry: selections[id].geometry };
+        });
+        var jobs = ids.map(function(id){ return incrementHex(id, selections[id].type); });
+
+        Promise.all(jobs).then(function(){
+          view.graphics.removeAll();
+          selections = {};
+          recomputeTotals();
+          showOwnSelections(picked);
+
+          var mv1 = document.getElementById("viewDiv1");
+          var mv2 = document.getElementById("viewDiv2");
+          mv1.style.zIndex = 1; mv1.style.pointerEvents = "none";
+          mv2.style.zIndex = 5; mv2.style.pointerEvents = "auto";
+          document.getElementById("resultsBanner").style.display = "block";
+          buildResultsLegend();
+          document.getElementById("resultsLegend").style.display = "block";
+        }).catch(function(err){
+          console.error("submit:", err);
+          alert("Something went wrong submitting your scenario. Please try again.");
+          btn.disabled = false; btn.textContent = "Submit Scenario";
+        });
+      });
+
+      // Results map context layers
+      map2.add(makeUgbLayer());
+      map2.add(makeSubareasLayer());
+
+      view.ui.move("zoom", uiCorner);
+      view2.ui.move("zoom", uiCorner);
+
+      // Mobile bottom-sheet collapse toggle. Start EXPANDED so the
+      // scenario bars are visible immediately; collapsing is opt-in.
+      var panelEl = document.getElementById("panel");
+      var handle = document.getElementById("sheetHandle");
+      var toggleLabel = document.getElementById("sheetToggleLabel");
+      function toggleSheet(){
+        panelEl.classList.toggle("collapsed");
+        toggleLabel.textContent = panelEl.classList.contains("collapsed") ? "tap to expand" : "tap to collapse";
+      }
+      handle.addEventListener("click", toggleSheet);
+      toggleLabel.addEventListener("click", toggleSheet);
+      toggleLabel.textContent = "tap to collapse";
+
+      // Initialize panel numbers
+      recomputeTotals();
+    });
+  </script>
+</body>
+</html>

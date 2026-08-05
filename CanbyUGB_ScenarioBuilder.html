@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
-  <title>Canby UGB Expansion — Scenario Builder</title>
+  <title>Canby UGB Expansion - Residential</title>
   <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css">
   <script src="https://js.arcgis.com/4.29/"></script>
   <style>
@@ -263,9 +263,15 @@
         min-width: 0; height: 40px; padding: 0 14px;
         font-size: 13px;
       }
-      #resultsBanner { font-size: 14px; padding: 10px 12px; }
+      /* Title strip sits above the results banner and the banner starts
+         below it, so the thank-you message never overlaps the title. */
+      #banner { z-index: 7; }
+      #resultsBanner {
+        font-size: 14px; padding: 10px 12px;
+        top: 34px;   /* clear the ~34px title strip */
+      }
       #resultsLegend {
-        top: 46px; left: 8px; right: 8px; width: auto;
+        top: 80px; left: 8px; right: 8px; width: auto;
         max-width: 220px;
       }
     }
@@ -274,7 +280,7 @@
   </style>
 </head>
 <body>
-  <h1 id="banner">Canby UGB Expansion</h1>
+  <h1 id="banner">Canby UGB Expansion - Residential</h1>
 
   <!-- Selection / paint map -->
   <div class="viewDiv" id="viewDiv1">
@@ -286,7 +292,7 @@
     <div id="panel">
       <div id="sheetHandle"></div>
       <span id="sheetToggleLabel">tap to expand</span>
-      <div id="panelTitle">Canby UGB Expansion</div>
+      <div id="panelTitle">Canby UGB Expansion - Residential</div>
       <h3>Build your scenario</h3>
       <p class="hint">Pick a type, then tap hexagons on the map.</p>
       <div class="subhead">Acreage targets</div>
@@ -330,11 +336,14 @@
       var TICK_FRAC = 0.75;
 
       // Order matters for panel display. target=null means "no goal" (Park).
+      // Residential density color ramp: lowest density (green-yellow) to
+      // highest density / Multi-Family (dark orange). Park sits outside the
+      // ramp with its own green since it's open space, not a housing density.
       var TYPES = [
-        { key: "SFSTD", label: "Single-Family Standard Lot",         color: [31,120,180],  target: 38 },
-        { key: "SFSM",  label: "Single-Family Small Lot & Cottages", color: [102,194,165], target: 56 },
-        { key: "TH",    label: "Townhomes/Plexes",                   color: [255,187,0],   target: 21 },
-        { key: "MF",    label: "Multi-Family",                       color: [227,26,28],   target: 21 },
+        { key: "SFSTD", label: "Single-Family Standard Lot",         color: [166,217,106], target: 38 },
+        { key: "SFSM",  label: "Single-Family Small Lot & Cottages", color: [217,239,90],  target: 56 },
+        { key: "TH",    label: "Townhomes/Plexes",                   color: [253,174,60],  target: 13 },
+        { key: "MF",    label: "Multi-Family",                       color: [230,110,30],  target: 21 },
         { key: "OS",    label: "Park",                               color: [34,120,52],   target: null }
       ];
       var TYPE_BY_KEY = {};
@@ -540,7 +549,7 @@
             return r.graphic && r.graphic.layer === hexLayer;
           });
           if (!hit) return;
-          if (!activeType) { alert("Pick a land use type first, then tap hexagons."); return; }
+          if (!activeType) { alert("Pick a land use type before tapping hexagons — it won't register otherwise."); return; }
 
           var attrs = hit.graphic.attributes;
           var hexId = attrs[JOIN_FIELD];

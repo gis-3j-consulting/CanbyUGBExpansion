@@ -178,6 +178,33 @@
     #applyButton:hover { background-color: #3333bb; color: #fff; box-shadow: 0 5px 10px rgba(0,0,0,0.4); }
     #applyButton:disabled { opacity: 0.6; cursor: default; }
 
+    /* Results-screen legend (top-left, mirrors the build panel spot) */
+    #resultsLegend {
+      display: none;
+      position: absolute;
+      top: 62px; left: 20px;
+      width: 250px;
+      z-index: 6;
+      background-color: rgba(255,255,255,0.96);
+      padding: 14px;
+      border: 1px solid #d0d0d0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      border-radius: 10px;
+      font-size: 13px;
+      box-sizing: border-box;
+    }
+    #resultsLegend h4 {
+      margin: 0 0 10px 0; font-size: 14px; font-weight: 700; color: #1a1a1a;
+    }
+    #resultsLegend .legend-row {
+      display: flex; align-items: center; gap: 9px; margin-bottom: 7px;
+    }
+    #resultsLegend .legend-row:last-child { margin-bottom: 0; }
+    #resultsLegend .swatch {
+      width: 16px; height: 16px; border-radius: 4px;
+      border: 1px solid rgba(0,0,0,0.3); flex: 0 0 auto;
+    }
+
     /* ===== Mobile: panel becomes a collapsible bottom sheet ===== */
     @media only screen and (max-width: 768px) {
       #banner {
@@ -237,6 +264,10 @@
         font-size: 13px;
       }
       #resultsBanner { font-size: 14px; padding: 10px 12px; }
+      #resultsLegend {
+        top: 46px; left: 8px; right: 8px; width: auto;
+        max-width: 220px;
+      }
     }
     /* Handle only shows on mobile */
     #sheetHandle, #sheetToggleLabel { display: none; }
@@ -268,7 +299,8 @@
 
   <!-- Results map -->
   <div class="viewDiv" id="viewDiv2">
-    <div id="resultsBanner">Thanks for submitting! Here are your selections.</div>
+    <div id="resultsBanner">Thanks for your response! Please return to the survey.</div>
+    <div id="resultsLegend"></div>
   </div>
 
   <script>
@@ -576,6 +608,20 @@
         });
       }
 
+      // Build the static color key shown on the results screen (all types).
+      function buildResultsLegend(){
+        var legend = document.getElementById("resultsLegend");
+        var html = "<h4>What the colors mean</h4>";
+        TYPES.forEach(function(t){
+          html += '<div class="legend-row">' +
+                    '<span class="swatch" style="background:rgba(' +
+                      t.color[0] + ',' + t.color[1] + ',' + t.color[2] + ',0.85)"></span>' +
+                    '<span>' + t.label + '</span>' +
+                  '</div>';
+        });
+        legend.innerHTML = html;
+      }
+
       document.getElementById("applyButton").addEventListener("click", function(){
         var ids = Object.keys(selections);
         if (ids.length === 0) { alert("No selections yet — pick a type and tap some hexagons first."); return; }
@@ -598,6 +644,8 @@
           mv1.style.zIndex = 1; mv1.style.pointerEvents = "none";
           mv2.style.zIndex = 5; mv2.style.pointerEvents = "auto";
           document.getElementById("resultsBanner").style.display = "block";
+          buildResultsLegend();
+          document.getElementById("resultsLegend").style.display = "block";
         }).catch(function(err){
           console.error("submit:", err);
           alert("Something went wrong submitting your scenario. Please try again.");

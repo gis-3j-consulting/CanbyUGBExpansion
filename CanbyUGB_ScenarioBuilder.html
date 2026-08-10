@@ -335,11 +335,6 @@
       // tick lands at TICK_FRAC across (0.75 = 75%), leaving room to overshoot.
       var TICK_FRAC = 0.75;
 
-      // Order matters for panel display. target=null means "no goal" (Park).
-      // Residential density color ramp: lowest density (green-yellow) to
-      // highest density / Multi-Family (dark orange). Park sits outside the
-      // ramp with its own green since it's open space, not a housing density.
-      var TYPES = [
       // Residential density ramp (warm, low->high) + green Park + steel-blue
       // Neighborhood Commercial (a non-residential use, so a cool color).
       // Every type now has a target, so all get progress bars.

@@ -285,7 +285,7 @@
   <!-- Selection / paint map -->
   <div class="viewDiv" id="viewDiv1">
     <div class="welcome-box">
-      <p>Welcome! Choose a land use type, then tap hexagons to place it. As you build your scenario, the panel tracks how many acres you've placed of each type. Tap a hexagon again to clear it. When you're done, tap "Submit Scenario."</p>
+      <p>Welcome! Choose a land use type, then tap hexagons to place it. As you build your scenario, the panel tracks how many acres you've placed of each type against the community targets. Tap a hexagon again to clear it. When you're done, tap "Submit Scenario."</p>
       <span class="close-button" onclick="document.querySelector('.welcome-box').style.display='none'">&times;</span>
     </div>
 
@@ -295,7 +295,7 @@
       <div id="panelTitle">Canby UGB Expansion - Industrial</div>
       <h3>Build your scenario</h3>
       <p class="hint">Pick a type, then tap hexagons on the map.</p>
-      <div class="subhead">Land use options</div>
+      <div class="subhead">Acreage targets</div>
       <div id="rows"></div>
       <div id="grandTotal">Total placed: 0.0 acres</div>
     </div>
@@ -323,25 +323,24 @@
     ], function(Map, MapView, FeatureLayer, GraphicsLayer, GeoJSONLayer, Graphic, Polygon, geometryEngine, Home) {
 
       // ---- Configuration -------------------------------------------------
-      var GEOJSON_URL = "WS_East_Hexagons_5_Acres.geojson";
-      var HEX_COUNTER_URL = "https://services3.arcgis.com/pZZTDhBBLO3B9dnl/arcgis/rest/services/East_Subareas_Hexagons_5_acres/FeatureServer/2";
+      var GEOJSON_URL = "WS_East_Hexagons_20_Acres.geojson";
+      var HEX_COUNTER_URL = "https://services3.arcgis.com/pZZTDhBBLO3B9dnl/arcgis/rest/services/East_Subareas_Hexagons_20_Acres/FeatureServer/2";
       var UGB_URL = "https://services3.arcgis.com/pZZTDhBBLO3B9dnl/arcgis/rest/services/Canby_UGB/FeatureServer/1";
       var SUBAREAS_URL = "https://services3.arcgis.com/pZZTDhBBLO3B9dnl/arcgis/rest/services/Subareas_Industrial_Dissolve/FeatureServer/2";
       var JOIN_FIELD = "HEX_ID";
       var AREA_FIELD = "Shape_Area";      // square feet
       var SQFT_PER_ACRE = 43560;
 
-      // No goals in this version — both types are target: null.
-      var TICK_FRAC = 0.75; // unused here (no bars), kept for shared code parity
+      // Bar max = target / TICK_FRAC, so the target tick sits at 75% across.
+      var TICK_FRAC = 0.75;
 
-      // Two industrial intensities plus Park (open space). No goals in this
-      // version, so every type is target: null (shows a running tally only).
-      // Less Intensive -> LI, More Intensive -> HI, Park -> OS (same fields
-      // as agreed; data lands in the same AGOL counter columns).
+      // Two industrial intensities plus Park, each with an acreage target
+      // (so all three get progress bars). Less Intensive -> LI, More
+      // Intensive -> HI, Park -> OS.
       var TYPES = [
-        { key: "LI", label: "Less Intensive Industrial", color: [175,141,195], target: null },
-        { key: "HI", label: "More Intensive Industrial", color: [84,39,136],   target: null },
-        { key: "OS", label: "Park",                      color: [34,120,52],   target: null }
+        { key: "LI", label: "Less Intensive Industrial", color: [175,141,195], target: 207 },
+        { key: "HI", label: "More Intensive Industrial", color: [84,39,136],   target: 207 },
+        { key: "OS", label: "Park",                      color: [34,120,52],   target: 13  }
       ];
       var TYPE_BY_KEY = {};
       TYPES.forEach(function(t){ TYPE_BY_KEY[t.key] = t; });

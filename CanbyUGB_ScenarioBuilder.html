@@ -340,11 +340,16 @@
       // highest density / Multi-Family (dark orange). Park sits outside the
       // ramp with its own green since it's open space, not a housing density.
       var TYPES = [
-        { key: "SFSTD", label: "Single-Family Standard Lot",         color: [234,238,110], target: 38 },
-        { key: "SFSM",  label: "Single-Family Small Lot & Cottages", color: [247,213,60],  target: 56 },
-        { key: "TH",    label: "Townhomes/Plexes",                   color: [253,174,60],  target: 13 },
-        { key: "MF",    label: "Multi-Family",                       color: [230,110,30],  target: 13 },
-        { key: "OS",    label: "Park",                               color: [34,120,52],   target: null }
+      // Residential density ramp (warm, low->high) + green Park + steel-blue
+      // Neighborhood Commercial (a non-residential use, so a cool color).
+      // Every type now has a target, so all get progress bars.
+      var TYPES = [
+        { key: "SFSTD", label: "Single-Family Standard Lot",         color: [234,238,110], target: 60 },
+        { key: "SFSM",  label: "Single-Family Small Lot & Cottages", color: [247,213,60],  target: 88 },
+        { key: "TH",    label: "Townhomes/Plexes",                   color: [253,174,60],  target: 21 },
+        { key: "MF",    label: "Multi-Family",                       color: [230,110,30],  target: 21 },
+        { key: "OS",    label: "Park",                               color: [34,120,52],   target: 31 },
+        { key: "EMP",   label: "Neighborhood Commercial",           color: [59,123,163],  target: 8  }
       ];
       var TYPE_BY_KEY = {};
       TYPES.forEach(function(t){ TYPE_BY_KEY[t.key] = t; });

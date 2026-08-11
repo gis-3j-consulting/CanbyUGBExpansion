@@ -232,31 +232,42 @@
         -webkit-overflow-scrolling: touch;
         border-radius: 14px 14px 0 0;
         border-bottom: none;
-        padding: 6px 14px calc(14px + env(safe-area-inset-bottom, 0px)) 14px;
+        padding: 0 14px calc(14px + env(safe-area-inset-bottom, 0px)) 14px;
         z-index: 8;
       }
       /* Hide the wordy header/hint on mobile to save vertical space */
-      #panel h3, #panel .hint { display: none; }
+      #panel h3, #panel .hint, #panelTitle { display: none; }
       #panel .subhead { margin: 2px 0 8px 0; }
 
-      /* Collapsed state shows just the handle + total */
-      #panel.collapsed { max-height: 86px; overflow: hidden; }
-
+      /* Sticky sheet header (grabber pill + label) — stays put while the
+         sheet body scrolls, and is the tap target that toggles the sheet.
+         Standard bottom-sheet pattern (Google/Apple Maps style). */
       #sheetHandle {
         display: block;
-        text-align: center;
-        padding: 2px 0 8px 0;
+        position: sticky; top: 0;
+        background: rgba(255,255,255,0.97);
+        margin: 0 -14px 6px -14px;
+        padding: 8px 14px 8px 14px;
         cursor: pointer;
+        text-align: center;
+        border-radius: 14px 14px 0 0;
+        z-index: 2;
       }
+      /* the grabber pill */
       #sheetHandle::before {
-        content: ""; display: inline-block;
-        width: 40px; height: 4px; border-radius: 2px;
-        background: #ccc;
+        content: ""; display: block; margin: 0 auto 6px auto;
+        width: 42px; height: 5px; border-radius: 3px;
+        background: #cfcfcf;
       }
       #sheetToggleLabel {
-        display: block; text-align: center;
-        font-size: 11px; color: #888; margin: -4px 0 6px 0;
+        display: block;
+        font-size: 12px; font-weight: 600; color: #444;
       }
+
+      /* Collapsed: show only the sticky header + the total line. */
+      #panel.collapsed { max-height: 96px; overflow: hidden; }
+      /* Keep the total visible when collapsed by pinning it under the header */
+      #panel.collapsed #grandTotal { margin-top: 4px; }
 
       #applyButton {
         bottom: auto; top: 44px; right: 8px;
@@ -275,7 +286,7 @@
         max-width: 220px;
       }
     }
-    /* Handle only shows on mobile */
+    /* Grabber/label only show on mobile */
     #sheetHandle, #sheetToggleLabel { display: none; }
   </style>
 </head>
@@ -290,8 +301,7 @@
     </div>
 
     <div id="panel">
-      <div id="sheetHandle"></div>
-      <span id="sheetToggleLabel">tap to expand</span>
+      <div id="sheetHandle"><span id="sheetToggleLabel">Land use options ▼</span></div>
       <div id="panelTitle">Canby UGB Expansion - Residential</div>
       <h3>Build your scenario</h3>
       <p class="hint">Pick a type, then tap hexagons on the map.</p>
@@ -669,18 +679,22 @@
       view.ui.move("zoom", uiCorner);
       view2.ui.move("zoom", uiCorner);
 
-      // Mobile bottom-sheet collapse toggle. Start EXPANDED so the
-      // scenario bars are visible immediately; collapsing is opt-in.
+      // Mobile bottom-sheet collapse toggle. Starts EXPANDED so the picker
+      // and bars are visible immediately; the grabber/header toggles it.
       var panelEl = document.getElementById("panel");
       var handle = document.getElementById("sheetHandle");
       var toggleLabel = document.getElementById("sheetToggleLabel");
+      function setSheetLabel(){
+        toggleLabel.textContent = panelEl.classList.contains("collapsed")
+          ? "Land use options ▲"
+          : "Land use options ▼";
+      }
       function toggleSheet(){
         panelEl.classList.toggle("collapsed");
-        toggleLabel.textContent = panelEl.classList.contains("collapsed") ? "tap to expand" : "tap to collapse";
+        setSheetLabel();
       }
       handle.addEventListener("click", toggleSheet);
-      toggleLabel.addEventListener("click", toggleSheet);
-      toggleLabel.textContent = "tap to collapse";
+      setSheetLabel();   // expanded by default
 
       // Initialize panel numbers
       recomputeTotals();

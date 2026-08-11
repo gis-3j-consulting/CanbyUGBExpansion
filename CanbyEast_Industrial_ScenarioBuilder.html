@@ -284,8 +284,11 @@
         max-width: 220px;
       }
     }
-    /* Grabber/label only show on mobile */
-    #sheetHandle, #sheetToggleLabel { display: none; }
+    /* Grabber/label only show on mobile — scope the hide to desktop so it
+       can't override the mobile display:block rule via source order. */
+    @media only screen and (min-width: 769px) {
+      #sheetHandle, #sheetToggleLabel { display: none; }
+    }
   </style>
 </head>
 <body>
